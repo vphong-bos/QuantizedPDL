@@ -4,17 +4,19 @@ from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
 from quantization.calibration_dataset import CalibrationDataset
 
-def create_quant_sim(model, device, image_height, image_width):
+def create_quant_sim(model, device: str, image_height: int, image_width: int,
+                     quant_scheme: str, default_output_bw: int, default_param_bw: int):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
     sim = QuantizationSimModel(
         model=model,
         dummy_input=dummy_input,
-        quant_scheme="tf_enhanced",
-        default_output_bw=8,
-        default_param_bw=8,
+        quant_scheme=quant_scheme,
+        default_output_bw=default_output_bw,
+        default_param_bw=default_param_bw,
     )
-    return sim
+    return sim, dummy_input
+
 
 def calibration_forward_pass(model, forward_args):
     dataloader, device, max_batches = forward_args

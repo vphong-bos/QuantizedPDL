@@ -305,7 +305,7 @@ def main(args):
         device=args.device,
         image_height=args.image_height,
         image_width=args.image_width,
-        # quant_scheme=args.quant_scheme,
+        quant_scheme=args.quant_scheme,
         default_output_bw=args.default_output_bw,
         default_param_bw=args.default_param_bw,
     )
