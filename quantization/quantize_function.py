@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
-from calibration_dataset import CalibrationDataset
+from quantization.calibration_dataset import CalibrationDataset
 
 def create_quant_sim(model, device, image_height, image_width):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
