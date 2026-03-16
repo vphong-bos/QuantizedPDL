@@ -153,11 +153,24 @@ def build_model(weights_path: str, model_category: str, image_height: int, image
 
 def run_inference(model, torch_input, model_category_const):
     with torch.no_grad():
-        semantic_logits, center_heatmap, offset_map, _ = model(torch_input)
+        outputs = model(torch_input)
 
     if model_category_const == DEEPLAB_V3_PLUS:
-        return semantic_logits
-    return semantic_logits, center_heatmap, offset_map
+        if isinstance(outputs, (tuple, list)):
+            return outputs[0]
+        return outputs
+
+    # PANOPTIC_DEEPLAB
+    if not isinstance(outputs, (tuple, list)):
+        raise TypeError(f"Expected tuple/list output, got {type(outputs)}")
+
+    if len(outputs) >= 3:
+        semantic_logits = outputs[0]
+        center_heatmap = outputs[1]
+        offset_map = outputs[2]
+        return semantic_logits, center_heatmap, offset_map
+
+    raise ValueError(f"Unexpected number of outputs: {len(outputs)}")
 
 
 def save_visualization(model_category_const, output, original_image, output_path, image_path):
@@ -304,6 +317,7 @@ def main(args):
     print("Creating AIMET QuantizationSimModel...")
     sim, dummy_input = create_quant_sim(
         model=model,
+        model_category_const=model_category_const,
         device=args.device,
         image_height=args.image_height,
         image_width=args.image_width,

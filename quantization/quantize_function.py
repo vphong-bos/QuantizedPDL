@@ -6,30 +6,74 @@ from quantization.calibration_dataset import CalibrationDataset
 
 from model.quantized_conv2d import QuantizedConv2d
 
-def create_quant_sim(model, device: str, image_height: int, image_width: int,
-                     quant_scheme: str, default_output_bw: int, default_param_bw: int):
+import torch
+import torch.nn as nn
+
+from model.pdl import DEEPLAB_V3_PLUS, PANOPTIC_DEEPLAB
+
+
+class AimetTraceWrapper(nn.Module):
+    def __init__(self, model, model_category_const):
+        super().__init__()
+        self.model = model
+        self.model_category_const = model_category_const
+
+    def forward(self, x):
+        outputs = self.model(x)
+
+        # Expecting original model to return:
+        # semantic_logits, center_heatmap, offset_map, something_else
+        if self.model_category_const == DEEPLAB_V3_PLUS:
+            if isinstance(outputs, (tuple, list)):
+                semantic_logits = outputs[0]
+            else:
+                semantic_logits = outputs
+            return semantic_logits
+
+        # PANOPTIC_DEEPLAB
+        if not isinstance(outputs, (tuple, list)):
+            raise TypeError(f"Expected tuple/list output from model, got {type(outputs)}")
+
+        semantic_logits = outputs[0]
+        center_heatmap = outputs[1]
+        offset_map = outputs[2]
+
+        # Return only tensors
+        return semantic_logits, center_heatmap, offset_map
+
+def create_quant_sim(
+    model,
+    model_category_const,
+    device,
+    image_height,
+    image_width,
+    quant_scheme,
+    default_output_bw,
+    default_param_bw,
+):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
+    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
+    wrapped_model.eval()
+
     sim = QuantizationSimModel(
-        model=model,
+        model=wrapped_model,
         dummy_input=dummy_input,
         quant_scheme=quant_scheme,
         default_output_bw=default_output_bw,
         default_param_bw=default_param_bw,
     )
+
     return sim, dummy_input
 
 
-def calibration_forward_pass(model, forward_args):
-    dataloader, device, max_batches = forward_args
+def calibration_forward_pass(model, forward_pass_args):
+    dataloader, device = forward_pass_args
     model.eval()
     with torch.no_grad():
-        for batch_idx, images in enumerate(dataloader):
-            images = images.to(device)
+        for images in dataloader:
+            images = images.to(device=device, dtype=torch.float32, non_blocking=True)
             _ = model(images)
-
-            if max_batches is not None and (batch_idx + 1) >= max_batches:
-                break
 
 def quantize_model_with_aimet(model, image_paths, device, image_height, image_width, num_calib=300):
     dataset = CalibrationDataset(
