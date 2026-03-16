@@ -4,6 +4,8 @@ from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
 from quantization.calibration_dataset import CalibrationDataset
 
+from model.quantized_conv2d import QuantizedConv2d
+
 def create_quant_sim(model, device: str, image_height: int, image_width: int,
                      quant_scheme: str, default_output_bw: int, default_param_bw: int):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
