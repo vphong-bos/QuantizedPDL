@@ -24,6 +24,8 @@ from model.pdl import (
     PytorchPanopticDeepLab,
 )
 
+from model.quantized_conv2d import QuantizedConv2d
+
 from quantization.calibration_dataset import CalibrationDataset
 from quantization.quantize_function import create_quant_sim, calibration_forward_pass, quantize_model_with_aimet
 
