@@ -353,10 +353,14 @@ def main(args):
 
     if not args.no_export:
         print("Exporting quantized model and encodings...")
+
+        sim.model.cpu()
+        cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
+
         sim.export(
             path=args.export_path,
             filename_prefix=args.export_prefix,
-            dummy_input=dummy_input,
+            dummy_input=cpu_dummy_input,
         )
         print(f"Exported files to: {args.export_path}")
 
