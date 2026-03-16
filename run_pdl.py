@@ -91,8 +91,8 @@ def build_model(weights_path, model_category, image_height, image_width, device)
     model = PytorchPanopticDeepLab(
         num_classes=19,
         common_stride=4,
-        project_channels=48,
-        decoder_channels=256,
+        project_channels=[32, 64],
+        decoder_channels=[256, 256, 256],
         sem_seg_head_channels=256,
         ins_embed_head_channels=32,
         train_size=(image_height, image_width),
