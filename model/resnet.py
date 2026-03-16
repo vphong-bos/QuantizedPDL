@@ -9,9 +9,8 @@ from typing import Dict
 import torch
 import torch.nn as nn
 
-from bottleneck import BottleneckBlock
-from stem import StemBlock
-
+from model.bottleneck import BottleneckBlock
+from model.stem import StemBlock
 
 class ResNet(nn.Module):
     """

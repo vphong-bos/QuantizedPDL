@@ -9,10 +9,9 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 from torch import nn
 from torch.nn import functional as F
 
-from aspp import get_norm
-from conv2d import Conv2d
-from semantic_head import DeepLabV3PlusHead, ShapeSpec
-
+from model.aspp import get_norm
+from model.conv2d import Conv2d
+from model.semantic_head import DeepLabV3PlusHead, ShapeSpec
 
 class PanopticDeepLabInsEmbedHead(DeepLabV3PlusHead):
     """

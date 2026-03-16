@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 from loguru import logger
 
-
 def fuse_imagenet_normalization(model):
     """
     Fuse ImageNet normalization constants into stem.conv1 weights of a PyTorch model.

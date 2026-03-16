@@ -10,8 +10,8 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from aspp import ASPP, get_norm
-from conv2d import Conv2d
+from model.aspp import ASPP, get_norm
+from model.conv2d import Conv2d
 
 
 class ShapeSpec:

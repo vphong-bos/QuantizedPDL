@@ -18,10 +18,10 @@ import torch
 from loguru import logger
 from torch import nn
 
-from embeded_head import PanopticDeepLabInsEmbedHead
-from postprocessing import get_panoptic_segmentation
-from resnet import ResNet
-from semantic_head import PanopticDeepLabSemSegHead, ShapeSpec
+from model.embeded_head import PanopticDeepLabInsEmbedHead
+from model.postprocessing import get_panoptic_segmentation
+from model.resnet import ResNet
+from model.semantic_head import PanopticDeepLabSemSegHead, ShapeSpec
 
 PANOPTIC_DEEPLAB = "panoptic_deeplab"
 DEEPLAB_V3_PLUS = "deeplab_v3_plus"

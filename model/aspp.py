@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from conv2d import Conv2d
+from model.conv2d import Conv2d
 
 class LayerNorm(nn.Module):
     """

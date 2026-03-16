@@ -9,7 +9,6 @@ from collections import Counter
 import torch
 import torch.nn.functional as F
 
-
 def find_instance_center(center_heatmap, threshold=0.1, nms_kernel=3, top_k=None):
     """
     Find the center points from the center heatmap.
