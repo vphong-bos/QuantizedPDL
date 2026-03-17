@@ -37,6 +37,7 @@ class BottleneckBlock(nn.Module):
         # Main path convolutions with norm as submodules to match state dict structure
         self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, kernel_size=1, stride=1, bias=False)
         self.bn1 = nn.SyncBatchNorm(bottleneck_channels, eps=1e-05, momentum=0.1)
+        self.relu1 = nn.ReLU()
 
         self.conv2 = nn.Conv2d(
             bottleneck_channels,
@@ -48,6 +49,7 @@ class BottleneckBlock(nn.Module):
             bias=False,
         )
         self.bn2 = nn.SyncBatchNorm(bottleneck_channels, eps=1e-05, momentum=0.1)
+        self.relu2 = nn.ReLU()
 
         self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, kernel_size=1, stride=1, bias=False)
         self.bn3 = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
@@ -57,7 +59,7 @@ class BottleneckBlock(nn.Module):
             self.shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=shortcut_stride, bias=False)
             self.shortcut_bn = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
 
-        self.relu = nn.ReLU()
+        self.relu_out = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
@@ -68,16 +70,16 @@ class BottleneckBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.relu(out)
+        out = self.relu1(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
-        out = self.relu(out)
+        out = self.relu2(out)
 
         out = self.conv3(out)
         out = self.bn3(out)
 
         out = out + identity
-        out = self.relu(out)
+        out = self.relu_out(out)
 
         return out
