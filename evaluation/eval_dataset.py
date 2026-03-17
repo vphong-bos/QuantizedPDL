@@ -113,15 +113,13 @@ def build_eval_loader(
     image_width=1024,
     image_height=512,
     batch_size=1,
-    num_workers=2,
-    resize_input=True,
+    num_workers=2
 ):
     dataset = EvalDataset(
         cityscapes_root=cityscapes_root,
         split=split,
         image_width=image_width,
         image_height=image_height,
-        resize_input=resize_input,
     )
 
     loader = DataLoader(
