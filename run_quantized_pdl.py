@@ -101,8 +101,27 @@ def main(args):
         device=args.device,
     )
 
-    print("Applying Cross-Layer Equalization...")
-    wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+    # print("Applying Cross-Layer Equalization...")
+    # wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+
+    from aimet_torch.model_preparer import prepare_model
+    from aimet_torch.model_validator import ModelValidator
+
+    model.eval()
+    wrapped_model = AimetTraceWrapper(model, model_category_const).to(args.device).eval()
+    dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
+
+    print("=== Running AIMET ModelValidator on original wrapped model ===")
+    is_valid = ModelValidator.validate_model(wrapped_model, model_input=dummy_input)
+    print("Model valid:", is_valid)
+
+    print("=== Running AIMET prepare_model manually ===")
+    prepared = prepare_model(wrapped_model)
+    prepared.eval()
+
+    print("=== Running AIMET ModelValidator on prepared model ===")
+    is_valid_prepared = ModelValidator.validate_model(prepared, model_input=dummy_input)
+    print("Prepared model valid:", is_valid_prepared)
 
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)

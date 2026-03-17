@@ -11,6 +11,8 @@ from model.pdl import (
 from evaluation.eval_dataset import build_eval_loader
 from evaluation.eval_metrics import evaluate_model
 
+from utils.pcc_metric import evaluate_pcc
+
 def parse_args():
     parser = argparse.ArgumentParser()
 
@@ -81,12 +83,21 @@ def main():
         max_samples=args.max_samples,
     )
 
+    print("Evaluating PCC between FP32 and quantized outputs...")
+    pcc_results = evaluate_pcc(
+        fp32_model=fp32_model,
+        quant_model=quant_model,
+        loader=loader,
+        device=args.device,
+        max_samples=args.max_samples,
+    )
+
     print("\n================ Compare FP32 vs Quantized ================")
     print(f"FP32  mIoU: {fp32_results['mIoU']:.4f}")
     print(f"INT8  mIoU: {quant_results['mIoU']:.4f}")
     print(f"Drop      : {quant_results['mIoU'] - fp32_results['mIoU']:.4f}")
+    print(f"PCC       : {pcc_results['PCC']:.6f}")
     print("===========================================================")
-
 
 if __name__ == "__main__":
     main()
