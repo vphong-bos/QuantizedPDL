@@ -105,8 +105,7 @@ def main(args):
     # wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
 
     from aimet_torch.model_preparer import prepare_model
-    from aimet_torch.model_validator import ModelValidator
-
+    from aimet_torch.model_validator.model_validator import ModelValidator
     model.eval()
     wrapped_model = AimetTraceWrapper(model, model_category_const).to(args.device).eval()
     dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
