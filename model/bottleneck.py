@@ -58,31 +58,24 @@ class BottleneckBlock(nn.Module):
             self.shortcut.norm = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Store input for residual connection
         identity = x
 
-        # Process shortcut if needed
         if self.has_shortcut:
             identity = self.shortcut(identity)
             identity = self.shortcut.norm(identity)
 
-        # Main path: Conv1 + BatchNorm + ReLU
         out = self.conv1(x)
         out = self.conv1.norm(out)
         out = F.relu(out)
 
-        # Conv2 + BatchNorm + ReLU
         out = self.conv2(out)
         out = self.conv2.norm(out)
         out = F.relu(out)
 
-        # Conv3 + BatchNorm (no ReLU yet)
         out = self.conv3(out)
         out = self.conv3.norm(out)
 
-        # Residual connection + ReLU
-        if self.has_shortcut:
-            out = out + identity
+        out = out + identity
         out = F.relu(out)
 
         return out

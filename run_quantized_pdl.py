@@ -175,7 +175,7 @@ def main(args):
 
     print("Running AutoQuant...")
     aq_start = time.time()
-    best_model, encoding_path, _ = auto_quant.optimize(
+    best_model, encoding_path, best_score = auto_quant.optimize(
         allowed_accuracy_drop=args.allowed_accuracy_drop
     )
     aq_time = time.time() - aq_start
@@ -185,31 +185,15 @@ def main(args):
     quantized_model.eval()
 
     if args.save_quant_checkpoint is not None:
-        torch.save({"state_dict": quantized_model.state_dict()}, args.save_quant_checkpoint)
-        print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
-
-    if not args.no_export:
-        print("Exporting quantized model and encodings...")
-        quantized_model.cpu().eval()
-        cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
-
-        if args.model_category == "PANOPTIC_DEEPLAB":
-            output_names = ["semantic_logits", "center_heatmap", "offset_map"]
-        else:
-            output_names = ["semantic_logits"]
-
-        onnx_path = os.path.join(args.export_path, f"{args.export_prefix}.onnx")
-        torch.onnx.export(
-            quantized_model,
-            cpu_dummy_input,
-            onnx_path,
-            export_params=True,
-            opset_version=13,
-            do_constant_folding=True,
-            input_names=["input"],
-            output_names=output_names,
+        torch.save(
+            {
+                "state_dict": quantized_model.state_dict(),
+                "encoding_path": encoding_path,
+                "best_score": best_score,
+            },
+            args.save_quant_checkpoint,
         )
-        print(f"Exported ONNX to: {onnx_path}")
+        print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
 
     print("Done.")
 

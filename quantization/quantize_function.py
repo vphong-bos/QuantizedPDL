@@ -5,6 +5,7 @@ import torchvision.transforms as T
 from quantization.calibration_dataset import CalibrationDataset
 
 from model.quantized_conv2d import QuantizedConv2d
+from model.pdl import build_model
 
 import torch
 import torch.nn as nn
@@ -137,15 +138,13 @@ def load_aimet_quantized_model(
         image_width=image_width,
         device=device,
     )
-
     model.eval()
 
-    # 2. Wrap model (important)
+    # 2. Wrap model for AIMET-safe forward
     wrapped_model = AimetTraceWrapper(model, model_category_const).to(device).eval()
 
+    # 3. Recreate QuantSim
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
-
-    # 3. Create QuantSim
     sim = QuantizationSimModel(
         model=wrapped_model,
         dummy_input=dummy_input,
@@ -154,30 +153,34 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    # 4. Load weights
-    ckpt = torch.load(quant_weights, map_location=device)
+    # 4. Load checkpoint
+    ckpt = torch.load(quant_weights, map_location=device, weights_only=False)
+    state_dict = ckpt["state_dict"] if isinstance(ckpt, dict) and "state_dict" in ckpt else ckpt
 
-    if "state_dict" in ckpt:
-        state_dict = ckpt["state_dict"]
-    else:
-        state_dict = ckpt
-
-    # clean prefixes
-    new_sd = {}
+    cleaned_sd = {}
     for k, v in state_dict.items():
         nk = k
         if nk.startswith("module."):
             nk = nk[len("module."):]
-        new_sd[nk] = v
+        if nk.startswith("model."):
+            nk = nk[len("model."):]
+        cleaned_sd[nk] = v
 
-    sim.model.load_state_dict(new_sd, strict=False)
+    missing, unexpected = sim.model.load_state_dict(cleaned_sd, strict=False)
+    print(f"[load] missing keys: {len(missing)}")
+    print(f"[load] unexpected keys: {len(unexpected)}")
+    if missing:
+        print("[load] first missing:", missing[:10])
+    if unexpected:
+        print("[load] first unexpected:", unexpected[:10])
 
     print("Loaded quantized weights")
 
-    # 5. Load encodings (CRITICAL)
+    # 5. Load encodings
     sim.set_and_freeze_param_encodings(encoding_path)
     sim.set_and_freeze_activation_encodings(encoding_path)
 
-    print("Loaded encodings")
+    print(f"Loaded encodings from: {encoding_path}")
 
-    return sim.model, model_category_const
+    sim.model.eval()
+    return sim, sim.model, model_category_const

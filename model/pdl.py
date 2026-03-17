@@ -202,45 +202,16 @@ class PytorchPanopticDeepLab(nn.Module):
             logger.error(f"Failed to load weights from {weights_path}: {e}")
             raise
 
-    def forward(
-        self, x, return_features: bool = False
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
-        """
-        Forward pass through the complete PyTorch Panoptic-DeepLab model.
+    def forward(self, x, ):
+        features = self.backbone(x)
 
-        Args:
-            x: Input tensor [B, C, H, W] or dictionary of backbone features
-            return_features: Whether to return intermediate backbone features
-
-        Returns:
-            Tuple containing:
-            - semantic_logits: Semantic segmentation predictions [B, num_classes, H, W]
-            - center_heatmap: Instance center predictions [B, 1, H, W]
-            - offset_map: Instance offset predictions [B, 2, H, W]
-            - features: Optional backbone features if return_features=True
-        """
-        # Handle both input tensor and pre-computed features
-        if isinstance(x, dict):
-            # Pre-computed features passed directly
-            features = x
-        else:
-            # Raw input tensor - run through backbone
-            features = self.backbone(x)
-
-        # Get semantic segmentation predictions
         semantic_logits, _ = self.semantic_head(features)
 
         if self.model_category == DEEPLAB_V3_PLUS:
-            # Get instance embedding predictions
-            center_heatmap, offset_map = None, None
-        else:
-            center_heatmap, offset_map, _, _ = self.instance_head(features)
+            return semantic_logits
 
-        # Return predictions and optionally features
-        if return_features:
-            return semantic_logits, center_heatmap, offset_map, features
-        else:
-            return semantic_logits, center_heatmap, offset_map, None
+        center_heatmap, offset_map = self.instance_head(features)
+        return semantic_logits, center_heatmap, offset_map
 
     def inference(
         self,

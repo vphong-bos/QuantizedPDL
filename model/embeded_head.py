@@ -123,7 +123,7 @@ class PanopticDeepLabInsEmbedHead(DeepLabV3PlusHead):
             * self.common_stride
         )
 
-        return center, offset, {}, {}
+        return center, offset
 
     def layers(self, features):
         """
