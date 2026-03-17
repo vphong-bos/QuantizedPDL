@@ -175,7 +175,7 @@ def main(args):
 
     print("Running AutoQuant...")
     aq_start = time.time()
-    best_model, encoding_path, best_score = auto_quant.optimize(
+    best_model, best_score, encoding_path = auto_quant.optimize(
         allowed_accuracy_drop=args.allowed_accuracy_drop
     )
     aq_time = time.time() - aq_start
@@ -192,18 +192,18 @@ def main(args):
 
     quantized_model.eval()
 
-    if args.save_quant_checkpoint is not None:
-        torch.save(
-            {
-                "state_dict": quantized_model.state_dict(),
-                "encoding_path": encoding_path,
-                "best_score": best_score,
-            },
-            args.save_quant_checkpoint,
-        )
-        print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
+    # if args.save_quant_checkpoint is not None:
+    #     torch.save(
+    #         {
+    #             "state_dict": quantized_model.state_dict(),
+    #             "encoding_path": encoding_path,
+    #             "best_score": best_score,
+    #         },
+    #         args.save_quant_checkpoint,
+    #     )
+    #     print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
 
-    print("Done.")
+    # print("Done.")
 
 if __name__ == "__main__":
     args = parse_args()

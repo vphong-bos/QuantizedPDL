@@ -1,4 +1,5 @@
 import torch
+import os
 from torch.utils.data import DataLoader, Dataset
 from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
@@ -120,7 +121,8 @@ def quantize_model_with_aimet(
     return sim
 
 def load_aimet_quantized_model(
-    checkpoint,
+    quant_weights,
+    encoding_path,
     model_category,
     image_height,
     image_width,
@@ -129,20 +131,29 @@ def load_aimet_quantized_model(
     default_output_bw=8,
     default_param_bw=8,
 ):
-    # 1. Load checkpoint
-    ckpt = torch.load(checkpoint, map_location=device, weights_only=False)
+    print("Loading quantized model...")
 
-    if not isinstance(ckpt, dict):
-        raise ValueError(f"Unsupported checkpoint format: {type(ckpt)}")
+    if not isinstance(encoding_path, (str, bytes, os.PathLike)):
+        raise ValueError(f"encoding_path must be a valid path, got: {encoding_path} ({type(encoding_path)})")
+    if not os.path.exists(encoding_path):
+        raise FileNotFoundError(f"Encoding file not found: {encoding_path}")
+    if not os.path.exists(quant_weights):
+        raise FileNotFoundError(f"Quantized weights file not found: {quant_weights}")
 
-    state_dict = ckpt.get("state_dict", ckpt)
-    encoding_path = ckpt.get("best_score", None)
-    best_score = ckpt.get("encoding_path", None)
+    loaded_obj = torch.load(quant_weights, map_location=device, weights_only=False)
 
-    print(f"[load] encoding_path from checkpoint: {encoding_path}")
-    print(f"[load] best_score from checkpoint: {best_score}")
+    # ------------------------------------------------------------------
+    # Case 1: AutoQuant/AIMET exported PyTorch model object (.pth is a Module)
+    # ------------------------------------------------------------------
+    if isinstance(loaded_obj, torch.nn.Module):
+        print("[load] Loaded exported model object directly from .pth")
+        model = loaded_obj.to(device).eval()
+        model_category_const = PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
+        return model, model_category_const
 
-    # 2. Rebuild FP32 model
+    # ------------------------------------------------------------------
+    # Case 2: Need to recreate QuantSim and load state_dict + encodings
+    # ------------------------------------------------------------------
     model, model_category_const = build_model(
         weights_path=None,
         model_category=model_category,
@@ -152,10 +163,8 @@ def load_aimet_quantized_model(
     )
     model.eval()
 
-    # 3. Wrap model for AIMET-safe forward
     wrapped_model = AimetTraceWrapper(model, model_category_const).to(device).eval()
 
-    # 4. Recreate QuantSim
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
     sim = QuantizationSimModel(
         model=wrapped_model,
@@ -165,17 +174,36 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    # 5. Clean prefixes and load weights
-    cleaned_sd = {}
+    # Extract state_dict from checkpoint-like object
+    if isinstance(loaded_obj, dict):
+        if "state_dict" in loaded_obj:
+            state_dict = loaded_obj["state_dict"]
+        elif "model_state_dict" in loaded_obj:
+            state_dict = loaded_obj["model_state_dict"]
+        elif "model" in loaded_obj and isinstance(loaded_obj["model"], torch.nn.Module):
+            print("[load] Checkpoint contains full model object in key 'model'")
+            model = loaded_obj["model"].to(device).eval()
+            return model, model_category_const
+        else:
+            state_dict = loaded_obj
+    else:
+        raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
+
+    if not isinstance(state_dict, dict):
+        raise ValueError(f"Loaded state_dict is not a dict: {type(state_dict)}")
+
+    # Fix keys to match sim.model
+    # sim.model usually expects keys prefixed with "model."
+    fixed_sd = {}
     for k, v in state_dict.items():
         nk = k
         if nk.startswith("module."):
             nk = nk[len("module."):]
-        if nk.startswith("model."):
-            nk = nk[len("model."):]
-        cleaned_sd[nk] = v
+        if not nk.startswith("model."):
+            nk = "model." + nk
+        fixed_sd[nk] = v
 
-    missing, unexpected = sim.model.load_state_dict(cleaned_sd, strict=False)
+    missing, unexpected = sim.model.load_state_dict(fixed_sd, strict=False)
     print(f"[load] missing keys: {len(missing)}")
     print(f"[load] unexpected keys: {len(unexpected)}")
     if missing:
@@ -183,13 +211,10 @@ def load_aimet_quantized_model(
     if unexpected:
         print("[load] first unexpected keys:", unexpected[:10])
 
-    # 6. Load encodings if checkpoint contains them
-    if encoding_path is not None:
-        sim.set_and_freeze_param_encodings(encoding_path)
-        sim.set_and_freeze_activation_encodings(encoding_path)
-        print(f"[load] Loaded encodings from: {encoding_path}")
-    else:
-        print("[load] No encoding_path found in checkpoint; loaded weights only.")
+    # Load encodings from AutoQuant artifact
+    sim.set_and_freeze_param_encodings(encoding_path)
+    sim.set_and_freeze_activation_encodings(encoding_path)
+    print(f"[load] Loaded encodings from: {encoding_path}")
 
     sim.model.eval()
     return sim.model, model_category_const
