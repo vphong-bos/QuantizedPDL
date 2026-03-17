@@ -8,11 +8,17 @@ import random
 from typing import List, Optional
 
 class CalibrationDataset(Dataset):
-    def __init__(self, image_paths, image_width, image_height):
+    def __init__(self, image_paths, image_width, image_height, mean, std):
         self.image_paths = image_paths
         self.image_width = image_width
         self.image_height = image_height
-        self.transform = T.Compose([T.ToTensor()])
+        self.transform = T.Compose([
+            T.ToTensor(),
+            T.Normalize(
+                mean=mean,
+                std=std,
+            ),
+        ])
 
     def __len__(self):
         return len(self.image_paths)
