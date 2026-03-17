@@ -23,6 +23,8 @@ from model.postprocessing import get_panoptic_segmentation
 from model.resnet import ResNet
 from model.semantic_head import PanopticDeepLabSemSegHead, ShapeSpec
 
+from collections import OrderedDict
+
 PANOPTIC_DEEPLAB = "panoptic_deeplab"
 DEEPLAB_V3_PLUS = "deeplab_v3_plus"
 
@@ -303,21 +305,81 @@ class PytorchPanopticDeepLab(nn.Module):
         }
 
 
-def create_pytorch_panoptic_deeplab_model(
-    num_classes: int = 19, use_real_weights: bool = True, weights_path: Optional[str] = None, **kwargs
-) -> PytorchPanopticDeepLab:
-    """
-    Factory function to create a PyTorch Panoptic-DeepLab model with default configuration.
+# def create_pytorch_panoptic_deeplab_model(
+#     num_classes: int = 19, use_real_weights: bool = True, weights_path: Optional[str] = None, **kwargs
+# ) -> PytorchPanopticDeepLab:
+#     """
+#     Factory function to create a PyTorch Panoptic-DeepLab model with default configuration.
 
-    Args:
-        num_classes: Number of semantic classes
-        use_real_weights: Whether to use pre-trained weights
-        weights_path: Path to complete model weights (e.g., model_final_bd324a.pkl)
-        **kwargs: Additional model configuration parameters
+#     Args:
+#         num_classes: Number of semantic classes
+#         use_real_weights: Whether to use pre-trained weights
+#         weights_path: Path to complete model weights (e.g., model_final_bd324a.pkl)
+#         **kwargs: Additional model configuration parameters
 
-    Returns:
-        Configured PytorchPanopticDeepLab model
-    """
-    return PytorchPanopticDeepLab(
-        num_classes=num_classes, use_real_weights=use_real_weights, weights_path=weights_path, **kwargs
+#     Returns:
+#         Configured PytorchPanopticDeepLab model
+#     """
+#     return PytorchPanopticDeepLab(
+#         num_classes=num_classes, use_real_weights=use_real_weights, weights_path=weights_path, **kwargs
+#     )
+
+def build_model(weights_path, model_category, image_height, image_width, device):
+    model_category_const = PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
+
+    model = PytorchPanopticDeepLab(
+        num_classes=19,
+        common_stride=4,
+        project_channels=[32, 64],
+        decoder_channels=[256, 256, 256],
+        sem_seg_head_channels=256,
+        ins_embed_head_channels=32,
+        train_size=(image_height, image_width),
+        weights_path=weights_path,
+        model_category=model_category_const,
     )
+    model = model.to(device=device, dtype=torch.float32)
+    model.eval()
+    return model, model_category_const
+
+def load_quantized_model(quant_weights, model_category, image_height, image_width, device):
+    model, model_category_const = build_model(
+        weights_path=None,
+        model_category=model_category,
+        image_height=image_height,
+        image_width=image_width,
+        device=device,
+    )
+
+    ckpt = torch.load(quant_weights, map_location=device)
+
+    if isinstance(ckpt, dict):
+        if "state_dict" in ckpt:
+            state_dict = ckpt["state_dict"]
+        elif "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+        else:
+            state_dict = ckpt
+    else:
+        raise ValueError(f"Unsupported checkpoint format in {quant_weights}")
+
+    # Remove possible prefixes
+    cleaned_state_dict = OrderedDict()
+    for k, v in state_dict.items():
+        nk = k
+        if nk.startswith("module."):
+            nk = nk[len("module."):]
+        if nk.startswith("model."):
+            nk = nk[len("model."):]
+        cleaned_state_dict[nk] = v
+
+    missing, unexpected = model.load_state_dict(cleaned_state_dict, strict=False)
+    print(f"[quant] missing keys: {len(missing)}")
+    print(f"[quant] unexpected keys: {len(unexpected)}")
+    if len(missing) > 0:
+        print("[quant] first missing keys:", missing[:10])
+    if len(unexpected) > 0:
+        print("[quant] first unexpected keys:", unexpected[:10])
+
+    model.eval()
+    return model, model_category_const

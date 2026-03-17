@@ -14,9 +14,10 @@ from utils.demo_utils import (
 )
 from model.pdl import (
     DEEPLAB_V3_PLUS,
-    PANOPTIC_DEEPLAB,
-    PytorchPanopticDeepLab,
+    build_model
 )
+
+from utils.image_loader import load_images, preprocess_image
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 IMAGES_PATH = os.path.join(pdl_home_path, "data/images")
@@ -47,63 +48,6 @@ def parse_args(argv=None):
     )
 
     return parser.parse_args(argv)
-
-
-def load_images(images_path, num_iters):
-    image_extensions = {".png", ".jpg", ".jpeg"}
-
-    if images_path is None:
-        return []
-
-    if os.path.isdir(images_path):
-        images = []
-        for file in sorted(os.listdir(images_path)):
-            _, ext = os.path.splitext(file)
-            if ext.lower() in image_extensions:
-                images.append(os.path.join(images_path, file))
-    else:
-        images = [images_path]
-
-    if num_iters != -1:
-        images = images[:num_iters]
-
-    return images
-
-
-def preprocess_image_from_path(image_path, input_width, input_height, device):
-    transform = T.Compose([T.ToTensor()])
-
-    original_image = cv2.imread(image_path)
-    if original_image is None:
-        raise ValueError(f"Failed to read image: {image_path}")
-
-    original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
-    original_image = cv2.resize(original_image, (input_width, input_height))
-
-    torch_input = transform(Image.fromarray(original_image)).unsqueeze(0).to(device=device, dtype=torch.float32)
-
-    return original_image, torch_input
-
-
-def build_model(weights_path, model_category, image_height, image_width, device):
-    model_category_const = PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
-
-    model = PytorchPanopticDeepLab(
-        num_classes=19,
-        common_stride=4,
-        project_channels=[32, 64],
-        decoder_channels=[256, 256, 256],
-        sem_seg_head_channels=256,
-        ins_embed_head_channels=32,
-        train_size=(image_height, image_width),
-        weights_path=weights_path,
-        model_category=model_category_const,
-    )
-
-    model = model.to(device=device, dtype=torch.float32)
-    model.eval()
-    return model, model_category_const
-
 
 def run_inference(model, torch_input, model_category_const):
     with torch.no_grad():
@@ -156,7 +100,6 @@ def save_visualization(
     save_predictions(output_dir, image_name, original_image, vis)
     print(f"Saved output for image {image_name} to {output_dir}")
 
-
 def panoptic_deeplab_runner(args):
     if args.batch_size != 1:
         raise ValueError("This simplified PyTorch runner currently supports batch_size=1 only.")
@@ -178,7 +121,7 @@ def panoptic_deeplab_runner(args):
     total_start = time.time()
 
     for i, image_path in enumerate(images, start=1):
-        original_image, torch_input = preprocess_image_from_path(
+        original_image, torch_input = preprocess_image(
             image_path=image_path,
             input_width=args.image_width,
             input_height=args.image_height,
