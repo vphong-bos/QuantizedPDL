@@ -136,8 +136,8 @@ def load_aimet_quantized_model(
         raise ValueError(f"Unsupported checkpoint format: {type(ckpt)}")
 
     state_dict = ckpt.get("state_dict", ckpt)
-    encoding_path = ckpt.get("encoding_path", None)
-    best_score = ckpt.get("best_score", None)
+    encoding_path = ckpt.get("best_score", None)
+    best_score = ckpt.get("encoding_path", None)
 
     print(f"[load] encoding_path from checkpoint: {encoding_path}")
     print(f"[load] best_score from checkpoint: {best_score}")
