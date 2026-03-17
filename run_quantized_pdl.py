@@ -8,11 +8,15 @@ import torch
 from model.pdl import build_model
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
-from quantization.quantize_function import create_quant_sim, calibration_forward_pass, AimetTraceWrapper
+from quantization.quantize_function import AimetTraceWrapper
 
 from aimet_torch.cross_layer_equalization import equalize_model
+from aimet_torch.auto_quant import AutoQuant
 
 from utils.image_loader import load_images
+
+from evaluation.eval_dataset import build_eval_loader
+from evaluation.eval_metrics import evaluate_model
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
@@ -62,7 +66,15 @@ def parse_args(argv=None):
     parser.add_argument("--export_prefix", type=str, default="panoptic_deeplab_int8", help="export filename prefix")
     parser.add_argument("--no_export", action="store_true", help="skip AIMET export step")
 
+    # AutoQuant-specific
+    parser.add_argument("--allowed_accuracy_drop", type=float, default=0.01,
+                        help="allowed accuracy drop for AutoQuant")
+    parser.add_argument("--results_dir", type=str, default=None,
+                        help="AutoQuant results dir; defaults to export_path/autoquant_results")
+    parser.add_argument("--cityscapes_root", type=str, required=True,
+                        help="Cityscapes root containing leftImg8bit/val and gtFine/val")
     return parser.parse_args(argv)
+
 
 def main(args):
     if args.batch_size < 1:
@@ -75,6 +87,11 @@ def main(args):
 
     os.makedirs(args.export_path, exist_ok=True)
 
+    results_dir = args.results_dir
+    if results_dir is None:
+        results_dir = os.path.join(args.export_path, "autoquant_results")
+    os.makedirs(results_dir, exist_ok=True)
+
     print("Loading FP32 model...")
     model, model_category_const = build_model(
         weights_path=args.weights_path,
@@ -86,12 +103,7 @@ def main(args):
 
     print("Applying Cross-Layer Equalization...")
     wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
-
-    equalize_model(
-        wrapped_model,
-        input_shapes=(1, 3, args.image_height, args.image_width)
-    )
-
+    
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
     calib_images = sample_calibration_images(all_calib_images, args.num_calib, args.seed)
@@ -108,28 +120,49 @@ def main(args):
         std=[0.229, 0.224, 0.225],
     )
 
-    print("Creating AIMET QuantizationSimModel...")
-    sim, _ = create_quant_sim(
-        model=wrapped_model,
-        model_category_const=model_category_const,
-        device=args.device,
-        image_height=args.image_height,
+    print("Building validation loader...")
+    eval_loader = build_eval_loader(
+        cityscapes_root=args.cityscapes_root,
         image_width=args.image_width,
+        image_height=args.image_height,
+        batch_size=1,
+        num_workers=args.num_workers,
+    )
+
+    print("Creating AutoQuant...")
+    dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
+
+    def eval_callback(candidate_model):
+        candidate_model.eval()
+        results = evaluate_model(
+            model=candidate_model,
+            model_category_const=model_category_const,
+            loader=eval_loader,
+            device=args.device,
+            max_samples=-1,
+        )
+        return results["mIoU"]
+
+    auto_quant = AutoQuant(
+        model=wrapped_model,
+        dummy_input=dummy_input,
+        data_loader=calib_loader,
+        eval_callback=eval_callback,
+        param_bw=args.default_param_bw,
+        output_bw=args.default_output_bw,
         quant_scheme=args.quant_scheme,
-        default_output_bw=args.default_output_bw,
-        default_param_bw=args.default_param_bw,
+        results_dir=results_dir,
     )
 
-    print("Computing encodings with calibration data...")
-    calib_start = time.time()
-    sim.compute_encodings(
-        forward_pass_callback=calibration_forward_pass,
-        forward_pass_callback_args=(calib_loader, args.device),
+    print("Running AutoQuant...")
+    aq_start = time.time()
+    best_model, _, encoding_path, _ = auto_quant.optimize(
+        allowed_accuracy_drop=args.allowed_accuracy_drop
     )
-    calib_time = time.time() - calib_start
-    print(f"Calibration finished in {calib_time:.2f} s")
+    aq_time = time.time() - aq_start
+    print(f"AutoQuant finished in {aq_time:.2f} s")
 
-    quantized_model = sim.model
+    quantized_model = best_model
     quantized_model.eval()
 
     if args.save_quant_checkpoint is not None:
@@ -138,15 +171,25 @@ def main(args):
 
     if not args.no_export:
         print("Exporting quantized model and encodings...")
-        sim.model.cpu() 
+        quantized_model.cpu()
         cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
-        sim.export(
-            path=args.export_path,
-            filename_prefix=args.export_prefix,
-            dummy_input=cpu_dummy_input,
+        # best_model may not be a QuantizationSimModel, so export via torch.onnx if needed
+        onnx_path = os.path.join(args.export_path, f"{args.export_prefix}.onnx")
+        torch.onnx.export(
+            quantized_model,
+            cpu_dummy_input,
+            onnx_path,
+            export_params=True,
+            opset_version=13,
+            do_constant_folding=True,
+            input_names=["input"],
+            output_names=["output"],
         )
-        print(f"Exported files to: {args.export_path}")
+        print(f"Exported ONNX to: {onnx_path}")
+
+        if encoding_path is not None:
+            print(f"AutoQuant encodings path: {encoding_path}")
 
     print("Done.")
 
