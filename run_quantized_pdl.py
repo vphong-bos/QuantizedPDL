@@ -181,7 +181,15 @@ def main(args):
     aq_time = time.time() - aq_start
     print(f"AutoQuant finished in {aq_time:.2f} s")
 
-    quantized_model = best_model
+    if best_model is None:
+        print("AutoQuant did not return a best_model. Falling back to W32A8 sim.")
+        sim, w32a8_score = auto_quant.run_inference()
+        print(f"W32A8 score: {w32a8_score}")
+        quantized_model = sim.model
+        encoding_path = None
+    else:
+        quantized_model = best_model
+
     quantized_model.eval()
 
     if args.save_quant_checkpoint is not None:
