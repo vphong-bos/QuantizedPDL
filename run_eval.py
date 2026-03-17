@@ -5,8 +5,9 @@ import torch
 
 from model.pdl import (
     build_model,
-    load_quantized_model
 )
+
+from quantization.quantize_function import load_aimet_quantized_model
 
 from evaluation.eval_dataset import build_eval_loader
 from evaluation.eval_metrics import evaluate_model
@@ -23,6 +24,8 @@ def parse_args():
                         help="Path to FP32 .pkl weights")
     parser.add_argument("--quant_weights", type=str, required=True,
                         help="Path to quantized .pt/.pth weights")
+    parser.add_argument("--encoding_path", type=str, required=True,
+                        help="Path to saved encoding path")
 
     parser.add_argument("--model_category", type=str, default="PANOPTIC_DEEPLAB",
                         choices=["DEEPLAB_V3_PLUS", "PANOPTIC_DEEPLAB"])
@@ -66,12 +69,16 @@ def main():
     )
 
     print("Loading quantized model...")
-    quant_model, quant_category = load_quantized_model(
+    quant_model, quant_category = load_aimet_quantized_model(
         quant_weights=args.quant_weights,
         model_category=args.model_category,
+        encoding_path=args.encoding_path,
         image_height=args.image_height,
         image_width=args.image_width,
         device=args.device,
+        quant_scheme="tf_enhanced",
+        default_output_bw=8,
+        default_param_bw=8,
     )
 
     print("Evaluating quantized...")

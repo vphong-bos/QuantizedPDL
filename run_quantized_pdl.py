@@ -175,7 +175,7 @@ def main(args):
 
     print("Running AutoQuant...")
     aq_start = time.time()
-    best_model, _, encoding_path, _ = auto_quant.optimize(
+    best_model, encoding_path, _ = auto_quant.optimize(
         allowed_accuracy_drop=args.allowed_accuracy_drop
     )
     aq_time = time.time() - aq_start

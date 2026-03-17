@@ -11,7 +11,6 @@ import torch.nn as nn
 
 from model.pdl import DEEPLAB_V3_PLUS, PANOPTIC_DEEPLAB
 
-
 class AimetTraceWrapper(nn.Module):
     def __init__(self, model, model_category_const):
         super().__init__()
@@ -118,3 +117,67 @@ def quantize_model_with_aimet(
     )
 
     return sim
+
+def load_aimet_quantized_model(
+    quant_weights,
+    encoding_path,
+    model_category,
+    image_height,
+    image_width,
+    device,
+    quant_scheme="tf_enhanced",
+    default_output_bw=8,
+    default_param_bw=8,
+):
+    # 1. Build FP32 model
+    model, model_category_const = build_model(
+        weights_path=None,
+        model_category=model_category,
+        image_height=image_height,
+        image_width=image_width,
+        device=device,
+    )
+
+    model.eval()
+
+    # 2. Wrap model (important)
+    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device).eval()
+
+    dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
+
+    # 3. Create QuantSim
+    sim = QuantizationSimModel(
+        model=wrapped_model,
+        dummy_input=dummy_input,
+        quant_scheme=quant_scheme,
+        default_output_bw=default_output_bw,
+        default_param_bw=default_param_bw,
+    )
+
+    # 4. Load weights
+    ckpt = torch.load(quant_weights, map_location=device)
+
+    if "state_dict" in ckpt:
+        state_dict = ckpt["state_dict"]
+    else:
+        state_dict = ckpt
+
+    # clean prefixes
+    new_sd = {}
+    for k, v in state_dict.items():
+        nk = k
+        if nk.startswith("module."):
+            nk = nk[len("module."):]
+        new_sd[nk] = v
+
+    sim.model.load_state_dict(new_sd, strict=False)
+
+    print("Loaded quantized weights")
+
+    # 5. Load encodings (CRITICAL)
+    sim.set_and_freeze_param_encodings(encoding_path)
+    sim.set_and_freeze_activation_encodings(encoding_path)
+
+    print("Loaded encodings")
+
+    return sim.model, model_category_const
