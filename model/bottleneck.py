@@ -81,7 +81,7 @@ class BottleneckBlock(nn.Module):
         out = self.conv3.norm(out)
 
         # Residual connection + ReLU
-        if self.has_shortcut or identity.shape == out.shape:
+        if self.has_shortcut:
             out = out + identity
         out = F.relu(out)
 
