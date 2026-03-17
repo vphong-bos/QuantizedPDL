@@ -82,7 +82,7 @@ class Conv2d(torch.nn.Conv2d):
             is_dynamo_compiling = _check_if_dynamo_compiling()
             if not is_dynamo_compiling:
                 with warnings.catch_warnings(record=True):
-                    if x.numel() == 0 and self.training:
+                    if self.training and x.shape[0] > 0:
                         # https://github.com/pytorch/pytorch/issues/12013
                         assert not isinstance(
                             self.norm, torch.nn.SyncBatchNorm
