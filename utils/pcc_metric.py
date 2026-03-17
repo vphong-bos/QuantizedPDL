@@ -78,7 +78,7 @@ def evaluate_pcc(fp32_model, quant_model, loader, device, max_samples=-1):
     seen = 0
 
     for batch in loader:
-        inputs = extract_input(batch).to(device)
+        inputs = extract_input(batch)
 
         fp32_out = extract_tensor(fp32_model(inputs))
         quant_out = extract_tensor(quant_model(inputs))
