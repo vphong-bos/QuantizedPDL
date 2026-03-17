@@ -158,6 +158,8 @@ class ASPP(nn.Module):
             activation=deepcopy(activation),
         )
 
+        self.dropout_layer = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
     def forward(self, x):
         size = x.shape[-2:]
         # if self.pool_kernel_size is not None:
@@ -181,6 +183,6 @@ class ASPP(nn.Module):
 
         res = self.project(res)
 
-        res = F.dropout(res, self.dropout, training=self.training) if self.dropout > 0 else res
-
+        res = self.dropout_layer(res)
+        
         return res

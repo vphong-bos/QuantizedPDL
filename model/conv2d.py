@@ -77,9 +77,7 @@ class Conv2d(torch.nn.Conv2d):
                             self.norm, torch.nn.SyncBatchNorm
                         ), "SyncBatchNorm does not support empty inputs!"
 
-        x = F.conv2d(
-            x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups
-        )
+        x = super().forward(x)
 
         if self.norm is not None:
             x = self.norm(x)

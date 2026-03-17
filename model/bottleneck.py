@@ -36,7 +36,7 @@ class BottleneckBlock(nn.Module):
 
         # Main path convolutions with norm as submodules to match state dict structure
         self.conv1 = nn.Conv2d(in_channels, bottleneck_channels, kernel_size=1, stride=1, bias=False)
-        self.conv1.norm = nn.SyncBatchNorm(bottleneck_channels, eps=1e-05, momentum=0.1)
+        self.bn1 = nn.SyncBatchNorm(bottleneck_channels, eps=1e-05, momentum=0.1)
 
         self.conv2 = nn.Conv2d(
             bottleneck_channels,
@@ -47,35 +47,37 @@ class BottleneckBlock(nn.Module):
             dilation=dilation,
             bias=False,
         )
-        self.conv2.norm = nn.SyncBatchNorm(bottleneck_channels, eps=1e-05, momentum=0.1)
+        self.bn2 = nn.SyncBatchNorm(bottleneck_channels, eps=1e-05, momentum=0.1)
 
         self.conv3 = nn.Conv2d(bottleneck_channels, out_channels, kernel_size=1, stride=1, bias=False)
-        self.conv3.norm = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
+        self.bn3 = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
 
         # Shortcut connection with norm as submodule to match state dict structure
         if has_shortcut:
             self.shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=shortcut_stride, bias=False)
-            self.shortcut.norm = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
+            self.shortcut_bn = nn.SyncBatchNorm(out_channels, eps=1e-05, momentum=0.1)
+
+        self.relu = nn.ReLU()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         identity = x
 
         if self.has_shortcut:
             identity = self.shortcut(identity)
-            identity = self.shortcut.norm(identity)
+            identity = self.shortcut_bn(identity)
 
         out = self.conv1(x)
-        out = self.conv1.norm(out)
-        out = F.relu(out)
+        out = self.bn1(out)
+        out = self.relu(out)
 
         out = self.conv2(out)
-        out = self.conv2.norm(out)
-        out = F.relu(out)
+        out = self.bn2(out)
+        out = self.relu(out)
 
         out = self.conv3(out)
-        out = self.conv3.norm(out)
+        out = self.bn3(out)
 
         out = out + identity
-        out = F.relu(out)
+        out = self.relu(out)
 
         return out
