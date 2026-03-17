@@ -85,7 +85,7 @@ def main(args):
     )
 
     print("Applying Cross-Layer Equalization...")
-    equalize_model(model)
+    equalize_model(model, input_shapes=(1, 3, args.image_height, args.image_width))
 
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
