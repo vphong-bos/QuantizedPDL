@@ -8,7 +8,7 @@ import torch
 from model.pdl import build_model
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
-from quantization.quantize_function import create_quant_sim, calibration_forward_pass
+from quantization.quantize_function import create_quant_sim, calibration_forward_pass, AimetTraceWrapper
 
 from aimet_torch.cross_layer_equalization import equalize_model
 
@@ -85,7 +85,12 @@ def main(args):
     )
 
     print("Applying Cross-Layer Equalization...")
-    equalize_model(model, input_shapes=(1, 3, args.image_height, args.image_width))
+    wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+
+    equalize_model(
+        wrapped_model,
+        input_shapes=(1, 3, args.image_height, args.image_width)
+    )
 
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
@@ -105,7 +110,7 @@ def main(args):
 
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
-        model=model,
+        model=wrapped_model,
         model_category_const=model_category_const,
         device=args.device,
         image_height=args.image_height,
