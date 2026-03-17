@@ -5,7 +5,7 @@ from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as T
 import random
-from typing import List
+from typing import List, Optional
 
 class CalibrationDataset(Dataset):
     def __init__(self, image_paths, image_width, image_height):
@@ -36,11 +36,15 @@ def create_calibration_loader(
     image_height: int,
     batch_size: int,
     num_workers: int,
+    mean: Optional[List[float]] = None,
+    std: Optional[List[float]] = None,
 ):
     dataset = CalibrationDataset(
         image_paths=calib_image_paths,
         image_width=image_width,
         image_height=image_height,
+        mean=mean,
+        std=std,
     )
     loader = DataLoader(
         dataset,

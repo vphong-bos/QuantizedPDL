@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 import argparse
 import os
-import random
 import time
-from typing import List
 
 import torch
-from torch.utils.data import DataLoader
 
 from model.pdl import build_model
-from model.quantized_conv2d import QuantizedConv2d  # keep registration side-effect
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
 from quantization.quantize_function import create_quant_sim, calibration_forward_pass
+
+from aimet_torch.cross_layer_equalization import equalize_model
 
 from utils.image_loader import load_images
 
@@ -44,7 +42,7 @@ def parse_args(argv=None):
         help="image file or folder used for AIMET calibration",
     )
 
-    parser.add_argument("--num_calib", type=int, default=300, help="number of calibration images")
+    parser.add_argument("--num_calib", type=int, default=800, help="number of calibration images")
     parser.add_argument("--batch_size", type=int, default=1, help="AIMET calibration batch size")
     parser.add_argument("--num_workers", type=int, default=2, help="dataloader workers")
     parser.add_argument("--seed", type=int, default=123, help="random seed for calibration sampling")
@@ -86,6 +84,9 @@ def main(args):
         device=args.device,
     )
 
+    print("Applying Cross-Layer Equalization...")
+    equalize_model(model, input_shape=(1, 3, args.image_height, args.image_width))
+
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
     calib_images = sample_calibration_images(all_calib_images, args.num_calib, args.seed)
@@ -98,6 +99,8 @@ def main(args):
         image_height=args.image_height,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
     )
 
     print("Creating AIMET QuantizationSimModel...")
@@ -130,7 +133,7 @@ def main(args):
 
     if not args.no_export:
         print("Exporting quantized model and encodings...")
-        sim.model.cpu()
+        sim.model.cpu() 
         cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
         sim.export(

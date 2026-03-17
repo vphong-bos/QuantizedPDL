@@ -75,7 +75,18 @@ def calibration_forward_pass(model, forward_pass_args):
             images = images.to(device=device, dtype=torch.float32, non_blocking=True)
             _ = model(images)
 
-def quantize_model_with_aimet(model, image_paths, device, image_height, image_width, num_calib=300):
+def quantize_model_with_aimet(
+    model,
+    model_category_const,
+    image_paths,
+    device,
+    image_height,
+    image_width,
+    num_calib=500,
+    quant_scheme="tf_enhanced",
+    default_output_bw=8,
+    default_param_bw=8,
+):
     dataset = CalibrationDataset(
         image_paths=image_paths[:num_calib],
         image_width=image_width,
@@ -90,12 +101,20 @@ def quantize_model_with_aimet(model, image_paths, device, image_height, image_wi
         pin_memory=True,
     )
 
-    sim = create_quant_sim(model, device, image_height, image_width)
+    sim, _ = create_quant_sim(
+        model=model,
+        model_category_const=model_category_const,
+        device=device,
+        image_height=image_height,
+        image_width=image_width,
+        quant_scheme=quant_scheme,
+        default_output_bw=default_output_bw,
+        default_param_bw=default_param_bw,
+    )
 
     sim.compute_encodings(
         forward_pass_callback=calibration_forward_pass,
-        forward_pass_callback_args=(loader, device, None),
+        forward_pass_callback_args=(loader, device),
     )
 
     return sim
-
