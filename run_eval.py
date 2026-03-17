@@ -22,10 +22,10 @@ def parse_args():
 
     parser.add_argument("--fp32_weights", type=str, required=True,
                         help="Path to FP32 .pkl weights")
-    parser.add_argument("--quant_weights", type=str, required=True,
-                        help="Path to quantized .pt/.pth weights")
-    parser.add_argument("--encoding_path", type=str, required=True,
-                        help="Path to saved encoding path")
+    parser.add_argument("--checkpoint", type=str, required=True,
+                        help="Path to quantized .pt/.pth checkpoint")
+    # parser.add_argument("--encoding_path", type=str, required=True,
+    #                     help="Path to saved encoding path")
 
     parser.add_argument("--model_category", type=str, default="PANOPTIC_DEEPLAB",
                         choices=["DEEPLAB_V3_PLUS", "PANOPTIC_DEEPLAB"])
@@ -73,9 +73,9 @@ def main():
 
     print("Loading quantized model...")
     quant_model, quant_category = load_aimet_quantized_model(
-        quant_weights=args.quant_weights,
+        checkpoint=args.checkpoint,
         model_category=args.model_category,
-        encoding_path=args.encoding_path,
+        # encoding_path=args.encoding_path,
         image_height=args.image_height,
         image_width=args.image_width,
         device=args.device,

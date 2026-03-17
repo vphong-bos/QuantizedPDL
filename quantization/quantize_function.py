@@ -121,7 +121,6 @@ def quantize_model_with_aimet(
 
 def load_aimet_quantized_model(
     quant_weights,
-    encoding_path,
     model_category,
     image_height,
     image_width,
@@ -130,7 +129,20 @@ def load_aimet_quantized_model(
     default_output_bw=8,
     default_param_bw=8,
 ):
-    # 1. Build FP32 model
+    # 1. Load checkpoint
+    ckpt = torch.load(quant_weights, map_location=device, weights_only=False)
+
+    if not isinstance(ckpt, dict):
+        raise ValueError(f"Unsupported checkpoint format: {type(ckpt)}")
+
+    state_dict = ckpt.get("state_dict", ckpt)
+    encoding_path = ckpt.get("encoding_path", None)
+    best_score = ckpt.get("best_score", None)
+
+    print(f"[load] encoding_path from checkpoint: {encoding_path}")
+    print(f"[load] best_score from checkpoint: {best_score}")
+
+    # 2. Rebuild FP32 model
     model, model_category_const = build_model(
         weights_path=None,
         model_category=model_category,
@@ -140,10 +152,10 @@ def load_aimet_quantized_model(
     )
     model.eval()
 
-    # 2. Wrap model for AIMET-safe forward
+    # 3. Wrap model for AIMET-safe forward
     wrapped_model = AimetTraceWrapper(model, model_category_const).to(device).eval()
 
-    # 3. Recreate QuantSim
+    # 4. Recreate QuantSim
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
     sim = QuantizationSimModel(
         model=wrapped_model,
@@ -153,10 +165,7 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    # 4. Load checkpoint
-    ckpt = torch.load(quant_weights, map_location=device, weights_only=False)
-    state_dict = ckpt["state_dict"] if isinstance(ckpt, dict) and "state_dict" in ckpt else ckpt
-
+    # 5. Clean prefixes and load weights
     cleaned_sd = {}
     for k, v in state_dict.items():
         nk = k
@@ -170,17 +179,17 @@ def load_aimet_quantized_model(
     print(f"[load] missing keys: {len(missing)}")
     print(f"[load] unexpected keys: {len(unexpected)}")
     if missing:
-        print("[load] first missing:", missing[:10])
+        print("[load] first missing keys:", missing[:10])
     if unexpected:
-        print("[load] first unexpected:", unexpected[:10])
+        print("[load] first unexpected keys:", unexpected[:10])
 
-    print("Loaded quantized weights")
-
-    # 5. Load encodings
-    sim.set_and_freeze_param_encodings(encoding_path)
-    sim.set_and_freeze_activation_encodings(encoding_path)
-
-    print(f"Loaded encodings from: {encoding_path}")
+    # 6. Load encodings if checkpoint contains them
+    if encoding_path is not None:
+        sim.set_and_freeze_param_encodings(encoding_path)
+        sim.set_and_freeze_activation_encodings(encoding_path)
+        print(f"[load] Loaded encodings from: {encoding_path}")
+    else:
+        print("[load] No encoding_path found in checkpoint; loaded weights only.")
 
     sim.model.eval()
-    return sim, sim.model, model_category_const
+    return sim.model, model_category_const
