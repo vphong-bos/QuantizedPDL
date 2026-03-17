@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--max_samples", type=int, default=-1,
                         help="Use only first N val images, -1 for full val")
-    parser.add_argument("--split", type=str, default="test",
+    parser.add_argument("--split", type=str, default="val",
                         choices=["test", "val"])
 
     return parser.parse_args()
