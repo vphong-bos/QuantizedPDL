@@ -351,7 +351,7 @@ def load_quantized_model(quant_weights, model_category, image_height, image_widt
         device=device,
     )
 
-    ckpt = torch.load(quant_weights, map_location=device)
+    ckpt = torch.load(quant_weights, map_location=device, weights_only=False)
 
     if isinstance(ckpt, dict):
         if "state_dict" in ckpt:
