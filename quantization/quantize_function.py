@@ -120,7 +120,7 @@ def quantize_model_with_aimet(
     return sim
 
 def load_aimet_quantized_model(
-    quant_weights,
+    checkpoint,
     model_category,
     image_height,
     image_width,
@@ -130,7 +130,7 @@ def load_aimet_quantized_model(
     default_param_bw=8,
 ):
     # 1. Load checkpoint
-    ckpt = torch.load(quant_weights, map_location=device, weights_only=False)
+    ckpt = torch.load(checkpoint, map_location=device, weights_only=False)
 
     if not isinstance(ckpt, dict):
         raise ValueError(f"Unsupported checkpoint format: {type(ckpt)}")
