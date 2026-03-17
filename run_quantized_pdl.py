@@ -102,8 +102,8 @@ def main(args):
     )
 
     print("Applying Cross-Layer Equalization...")
-    wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
-    
+    # wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
     calib_images = sample_calibration_images(all_calib_images, args.num_calib, args.seed)
@@ -144,7 +144,7 @@ def main(args):
         return results["mIoU"]
 
     auto_quant = AutoQuant(
-        model=wrapped_model,
+        model=model,
         dummy_input=dummy_input,
         data_loader=calib_loader,
         eval_callback=eval_callback,
