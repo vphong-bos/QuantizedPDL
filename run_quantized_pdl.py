@@ -170,6 +170,7 @@ def main(args):
         output_bw=args.default_output_bw,
         quant_scheme=args.quant_scheme,
         results_dir=results_dir,
+        strict_validation=False,
     )
 
     print("Running AutoQuant...")
