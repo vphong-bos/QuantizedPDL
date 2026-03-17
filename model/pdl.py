@@ -363,7 +363,6 @@ def load_quantized_model(quant_weights, model_category, image_height, image_widt
     else:
         raise ValueError(f"Unsupported checkpoint format in {quant_weights}")
 
-    # Remove possible prefixes
     cleaned_state_dict = OrderedDict()
     for k, v in state_dict.items():
         nk = k
@@ -374,12 +373,25 @@ def load_quantized_model(quant_weights, model_category, image_height, image_widt
         cleaned_state_dict[nk] = v
 
     missing, unexpected = model.load_state_dict(cleaned_state_dict, strict=False)
+
     print(f"[quant] missing keys: {len(missing)}")
     print(f"[quant] unexpected keys: {len(unexpected)}")
-    if len(missing) > 0:
-        print("[quant] first missing keys:", missing[:10])
-    if len(unexpected) > 0:
-        print("[quant] first unexpected keys:", unexpected[:10])
+
+    if missing:
+        print("[quant] first missing keys:", missing[:20])
+    if unexpected:
+        print("[quant] first unexpected keys:", unexpected[:20])
+
+    core_missing = [k for k in missing if "quant" not in k.lower() and "encoding" not in k.lower()]
+    core_unexpected = [k for k in unexpected if "quant" not in k.lower() and "encoding" not in k.lower()]
+
+    print(f"[quant] core missing keys: {len(core_missing)}")
+    print(f"[quant] core unexpected keys: {len(core_unexpected)}")
+
+    if core_missing:
+        print("[quant] first core missing keys:", core_missing[:20])
+    if core_unexpected:
+        print("[quant] first core unexpected keys:", core_unexpected[:20])
 
     model.eval()
     return model, model_category_const

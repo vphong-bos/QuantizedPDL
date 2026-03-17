@@ -102,7 +102,7 @@ def main(args):
     )
 
     print("Applying Cross-Layer Equalization...")
-    # wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+    wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
 
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
@@ -132,19 +132,19 @@ def main(args):
     print("Creating AutoQuant...")
     dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
 
-    def eval_callback(candidate_model):
+    def eval_callback(candidate_model, num_samples=None):
         candidate_model.eval()
         results = evaluate_model(
             model=candidate_model,
             model_category_const=model_category_const,
             loader=eval_loader,
             device=args.device,
-            max_samples=-1,
+            max_samples=-1 if num_samples is None else num_samples,
         )
         return results["mIoU"]
 
     auto_quant = AutoQuant(
-        model=model,
+        model=wrapped_model,
         dummy_input=dummy_input,
         data_loader=calib_loader,
         eval_callback=eval_callback,
@@ -171,10 +171,14 @@ def main(args):
 
     if not args.no_export:
         print("Exporting quantized model and encodings...")
-        quantized_model.cpu()
+        quantized_model.cpu().eval()
         cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
-        # best_model may not be a QuantizationSimModel, so export via torch.onnx if needed
+        if args.model_category == "PANOPTIC_DEEPLAB":
+            output_names = ["semantic_logits", "center_heatmap", "offset_map"]
+        else:
+            output_names = ["semantic_logits"]
+
         onnx_path = os.path.join(args.export_path, f"{args.export_prefix}.onnx")
         torch.onnx.export(
             quantized_model,
@@ -184,15 +188,11 @@ def main(args):
             opset_version=13,
             do_constant_folding=True,
             input_names=["input"],
-            output_names=["output"],
+            output_names=output_names,
         )
         print(f"Exported ONNX to: {onnx_path}")
 
-        if encoding_path is not None:
-            print(f"AutoQuant encodings path: {encoding_path}")
-
     print("Done.")
-
 
 if __name__ == "__main__":
     args = parse_args()
