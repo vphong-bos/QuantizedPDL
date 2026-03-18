@@ -1,31 +1,42 @@
 import torch
 
 def extract_input(batch):
-    """
-    Tries common batch formats:
-      - dict with 'image' or 'images'
-      - tuple/list where first item may itself be dict/tensor
-      - raw tensor
-    """
+    if torch.is_tensor(batch):
+        return batch
+
     if isinstance(batch, dict):
-        if "image" in batch:
-            return extract_input(batch["image"])
-        if "images" in batch:
-            return extract_input(batch["images"])
-        if "input" in batch:
-            return extract_input(batch["input"])
+        for key in ["image", "images", "input", "inputs"]:
+            if key in batch:
+                return extract_input(batch[key])
+
+        # fallback: tìm tensor đầu tiên trong dict
+        for v in batch.values():
+            try:
+                return extract_input(v)
+            except Exception:
+                pass
+
         raise KeyError(f"Batch dict does not contain supported keys. Got: {list(batch.keys())}")
 
     if isinstance(batch, (list, tuple)):
         if len(batch) == 0:
             raise ValueError("Empty batch list/tuple.")
-        return extract_input(batch[0])
 
-    if torch.is_tensor(batch):
-        return batch
+        # ưu tiên tensor ảnh BCHW
+        for item in batch:
+            if torch.is_tensor(item) and item.ndim == 4:
+                return item
+
+        # fallback: recurse từng item
+        for item in batch:
+            try:
+                return extract_input(item)
+            except Exception:
+                pass
+
+        raise TypeError("Could not extract image tensor from batch list/tuple.")
 
     raise TypeError(f"Unsupported batch type: {type(batch)}")
-
 
 def extract_tensor(output):
     """
@@ -73,7 +84,18 @@ def evaluate_pcc(fp32_model, quant_model, loader, device, max_samples=-1):
     seen = 0
 
     for batch in loader:
-        inputs = extract_input(batch).to(device=device, dtype=torch.float32, non_blocking=True)
+        inputs = extract_input(batch)
+
+        if not torch.is_tensor(inputs):
+            raise TypeError(f"Extracted input is not a tensor: {type(inputs)}")
+
+        if inputs.ndim == 3:
+            inputs = inputs.unsqueeze(0)
+
+        if inputs.ndim != 4:
+            raise ValueError(f"Expected BCHW input, got shape {tuple(inputs.shape)}")
+
+        inputs = inputs.to(device=device, dtype=torch.float32, non_blocking=True)
 
         fp32_out = extract_tensor(fp32_model(inputs))
         quant_out = extract_tensor(quant_model(inputs))
