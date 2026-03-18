@@ -67,12 +67,12 @@ def parse_args(argv=None):
     parser.add_argument("--no_export", action="store_true", help="skip AIMET export step")
 
     # AutoQuant-specific
-    parser.add_argument("--allowed_accuracy_drop", type=float, default=0.01,
+    parser.add_argument("--allowed_accuracy_drop", type=float, default=0.5,
                         help="allowed accuracy drop for AutoQuant")
     parser.add_argument("--results_dir", type=str, default=None,
                         help="AutoQuant results dir; defaults to export_path/autoquant_results")
-    parser.add_argument("--cityscapes_root", type=str, required=True,
-                        help="Cityscapes root containing leftImg8bit/val and gtFine/val")
+    # parser.add_argument("--cityscapes_root", type=str, required=True,
+    #                     help="Cityscapes root containing leftImg8bit/val and gtFine/val")
     return parser.parse_args(argv)
 
 

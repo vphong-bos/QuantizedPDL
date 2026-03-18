@@ -323,3 +323,21 @@ def create_pytorch_panoptic_deeplab_model(
     return PytorchPanopticDeepLab(
         num_classes=num_classes, use_real_weights=use_real_weights, weights_path=weights_path, **kwargs
     )
+
+def build_model(weights_path, model_category, image_height, image_width, device):
+    model_category_const = PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
+
+    model = PytorchPanopticDeepLab(
+        num_classes=19,
+        common_stride=4,
+        project_channels=[32, 64],
+        decoder_channels=[256, 256, 256],
+        sem_seg_head_channels=256,
+        ins_embed_head_channels=32,
+        train_size=(image_height, image_width),
+        weights_path=weights_path,
+        model_category=model_category_const,
+    )
+    model = model.to(device=device, dtype=torch.float32)
+    model.eval()
+    return model, model_category_const
