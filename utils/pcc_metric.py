@@ -84,6 +84,23 @@ def evaluate_pcc(fp32_model, quant_model, loader, device, max_samples=-1):
     seen = 0
 
     for batch in loader:
+        print("raw batch type:", type(batch))
+        if isinstance(batch, (list, tuple)):
+            print("raw batch len:", len(batch))
+            for i, item in enumerate(batch):
+                print(f"  item[{i}] type:", type(item), "shape:", getattr(item, "shape", None))
+        elif isinstance(batch, dict):
+            print("raw batch keys:", list(batch.keys()))
+            for k, v in batch.items():
+                print(f"  {k}: type={type(v)}, shape={getattr(v, 'shape', None)}")
+        else:
+            print("raw batch shape:", getattr(batch, "shape", None))
+
+        inputs = extract_input(batch)
+        print("extracted input shape:", getattr(inputs, "shape", None))
+        break
+
+    for batch in loader:
         inputs = extract_input(batch)
 
         if not torch.is_tensor(inputs):
