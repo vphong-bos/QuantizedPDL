@@ -157,7 +157,11 @@ def main(args):
 
         model.cpu().eval()
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
-        equalize_model(model, dummy_input_cpu)
+        equalize_model(
+            model,
+            input_shapes=(1, 3, args.image_height, args.image_width),
+            dummy_input=dummy_input_cpu,
+        )
 
         model.to(args.device).eval()
         cle_time = time.time() - cle_start
