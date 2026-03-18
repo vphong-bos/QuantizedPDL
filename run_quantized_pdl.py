@@ -147,7 +147,7 @@ def main(args):
         image_width=args.image_width,
         device=args.device,
     )
-    wrapped_model = AimetTraceWrapper(model).to(args.device).eval()
+    wrapped_model = AimetTraceWrapper(model=model, model_category_const=model_category_const).to(args.device).eval()
 
     if args.enable_cle:
         print("Applying Cross-Layer Equalization (CLE)...")
