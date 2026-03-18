@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader, Dataset
 from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
 from quantization.calibration_dataset import CalibrationDataset
-
+from quantization.quantize_function import calibration_forward_pass
 from model.quantized_conv2d import QuantizedConv2d
 from model.pdl import build_model
 
@@ -195,7 +195,8 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    sim.load_encodings(encoding_path)
+    sim.set_and_freeze_param_encodings(encoding_path=encoding_path)
+    # sim.load_encodings(encoding_path)
     sim.model.to(device).eval()
 
     return sim.model, model_category_const
