@@ -147,7 +147,7 @@ def main(args):
         image_width=args.image_width,
         device=args.device,
     )
-    model.eval()
+    wrapped_model = AimetTraceWrapper(model).to(args.device).eval()
 
     if args.enable_cle:
         print("Applying Cross-Layer Equalization (CLE)...")
@@ -158,12 +158,12 @@ def main(args):
         model.cpu().eval()
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
         equalize_model(
-            model,
+            wrapped_model,
             input_shapes=(1, 3, args.image_height, args.image_width),
             dummy_input=dummy_input_cpu,
         )
 
-        model.to(args.device).eval()
+        wrapped_model.to(args.device).eval()
         cle_time = time.time() - cle_start
         print(f"CLE finished in {cle_time:.2f} s")
     else:
@@ -187,7 +187,7 @@ def main(args):
 
     if args.enable_adaround:
         print("Applying AdaRound...")
-        model.cpu().eval()
+        wrapped_model.cpu().eval()
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
         adaround_params = AdaroundParameters(
@@ -197,8 +197,8 @@ def main(args):
             forward_fn=adaround_forward_fn,
         )
 
-        model = Adaround.apply_adaround(
-            model=model,
+        wrapped_model = Adaround.apply_adaround(
+            model=wrapped_model,
             dummy_input=dummy_input_cpu,
             params=adaround_params,
             path=args.adaround_path,
@@ -208,7 +208,7 @@ def main(args):
             default_config_file=args.config_file,
         )
 
-        model.to(args.device).eval()
+        wrapped_model.to(args.device).eval()
         print(
             f"AdaRound finished. Encodings saved under: "
             f"{os.path.join(args.adaround_path, args.adaround_prefix)}*.encodings"
@@ -218,7 +218,7 @@ def main(args):
 
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
-        model=model,
+        model=wrapped_model,
         model_category_const=model_category_const,
         device=args.device,
         image_height=args.image_height,
