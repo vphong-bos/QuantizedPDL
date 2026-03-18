@@ -5,7 +5,6 @@ from torch.utils.data import DataLoader, Dataset
 from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
 from quantization.calibration_dataset import CalibrationDataset
-from quantization.quantize_function import calibration_forward_pass
 from model.quantized_conv2d import QuantizedConv2d
 from model.pdl import build_model
 
