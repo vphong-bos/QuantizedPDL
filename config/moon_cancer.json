@@ -1,0 +1,23 @@
+{
+  "defaults": {
+    "ops": {
+      "is_output_quantized": "True",
+      "is_symmetric": "False"
+    },
+    "params": {
+      "is_quantized": "True",
+      "is_symmetric": "True"
+    }
+  },
+  "op_type": {
+    "Concat": {
+      "is_output_quantized": "False"
+    },
+    "Resize": {
+      "is_output_quantized": "False"
+    },
+    "Mul": {
+      "is_output_quantized": "False"
+    }
+  }
+}

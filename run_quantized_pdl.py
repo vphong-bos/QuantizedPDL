@@ -73,6 +73,8 @@ def parse_args(argv=None):
                         help="AutoQuant results dir; defaults to export_path/autoquant_results")
     # parser.add_argument("--cityscapes_root", type=str, required=True,
     #                     help="Cityscapes root containing leftImg8bit/val and gtFine/val")
+    parser.add_argument("--config_file", type=str, default=None,
+                        help="Config for quantize model")
     return parser.parse_args(argv)
 
 
@@ -148,6 +150,7 @@ def main(args):
         quant_scheme=args.quant_scheme,
         default_output_bw=args.default_output_bw,
         default_param_bw=args.default_param_bw,
+        config_file=args.config_file
     )
 
     print("Computing encodings with calibration data...")
