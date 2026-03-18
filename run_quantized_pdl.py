@@ -24,14 +24,11 @@ DEFAULT_EXPORT_PATH = os.path.join(pdl_home_path, "quantized_export")
 import types
 
 def patch_traceable_forward(model, model_category_const):
-    """
-    Monkey-patch model.forward so AIMET tracing sees only tensors,
-    while keeping the original module identities unchanged.
-    """
-    original_forward = model.forward
+    # IMPORTANT: use unbound class forward, not model.forward
+    original_forward_fn = type(model).forward
 
     def traced_forward(self, x):
-        outputs = original_forward(x)
+        outputs = original_forward_fn(self, x)
 
         if model_category_const == DEEPLAB_V3_PLUS:
             if isinstance(outputs, (tuple, list)):
@@ -48,12 +45,11 @@ def patch_traceable_forward(model, model_category_const):
         return semantic_logits, center_heatmap, offset_map
 
     model.forward = types.MethodType(traced_forward, model)
-    return original_forward
+    return original_forward_fn
 
 
-def restore_forward(model, original_forward):
-    model.forward = original_forward
-
+def restore_forward(model, original_forward_fn):
+    model.forward = types.MethodType(original_forward_fn, model)
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser()
