@@ -170,9 +170,9 @@ def load_aimet_quantized_model(
             image_height=image_height,
             image_width=image_width,
             device=device,
-            quant_scheme="tf_enhanced",
-            default_output_bw=8,
-            default_param_bw=8,
+            # quant_scheme="tf_enhanced",
+            # default_output_bw=8,
+            # default_param_bw=8,
         )
         model = model.to(device).eval()
 
