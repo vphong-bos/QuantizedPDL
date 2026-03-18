@@ -55,11 +55,11 @@ def create_quant_sim(
 ):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
-    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
-    model.eval()
+    # wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
+    # model.eval()
 
     sim = QuantizationSimModel(
-        model=wrapped_model,
+        model=model,
         dummy_input=dummy_input,
         quant_scheme=quant_scheme,
         default_output_bw=default_output_bw,

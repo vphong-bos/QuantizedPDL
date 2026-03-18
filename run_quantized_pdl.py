@@ -14,9 +14,45 @@ from utils.image_loader import load_images
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import quantsim
 
+from model.pdl import DEEPLAB_V3_PLUS, PANOPTIC_DEEPLAB
+
+
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
 DEFAULT_EXPORT_PATH = os.path.join(pdl_home_path, "quantized_export")
+
+import types
+
+def patch_traceable_forward(model, model_category_const):
+    """
+    Monkey-patch model.forward so AIMET tracing sees only tensors,
+    while keeping the original module identities unchanged.
+    """
+    original_forward = model.forward
+
+    def traced_forward(self, x):
+        outputs = original_forward(x)
+
+        if model_category_const == DEEPLAB_V3_PLUS:
+            if isinstance(outputs, (tuple, list)):
+                return outputs[0]
+            return outputs
+
+        # PANOPTIC_DEEPLAB
+        if not isinstance(outputs, (tuple, list)):
+            raise TypeError(f"Expected tuple/list output from model, got {type(outputs)}")
+
+        semantic_logits = outputs[0]
+        center_heatmap = outputs[1]
+        offset_map = outputs[2]
+        return semantic_logits, center_heatmap, offset_map
+
+    model.forward = types.MethodType(traced_forward, model)
+    return original_forward
+
+
+def restore_forward(model, original_forward):
+    model.forward = original_forward
 
 
 def parse_args(argv=None):
@@ -149,6 +185,8 @@ def main(args):
     )
     model = model.to(args.device).eval()
 
+    # Patch forward once so CLE / AdaRound / QuantSim can trace the same model object
+    original_forward = patch_traceable_forward(model, model_category_const)
     if args.enable_cle:
         print("Applying Cross-Layer Equalization (CLE)...")
         from aimet_torch.cross_layer_equalization import equalize_model
@@ -158,13 +196,8 @@ def main(args):
         model = model.cpu().eval()
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
-        cle_wrapper = AimetTraceWrapper(
-            model=model,
-            model_category_const=model_category_const,
-        ).cpu().eval()
-
         equalize_model(
-            cle_wrapper,
+            model,
             input_shapes=(1, 3, args.image_height, args.image_width),
             dummy_input=dummy_input_cpu,
         )
@@ -209,9 +242,9 @@ def main(args):
             forward_fn=adaround_forward_fn,
         )
 
-        wrapped_model = wrapped_model.cpu().eval()
-        wrapped_model = Adaround.apply_adaround(
-            model=wrapped_model,
+        model = model.cpu().eval()
+        model = Adaround.apply_adaround(
+            model=model,
             dummy_input=dummy_input_cpu,
             params=adaround_params,
             path=args.adaround_path,
@@ -221,7 +254,7 @@ def main(args):
             default_config_file=args.config_file,
         )
 
-        wrapped_model = wrapped_model.to(args.device).eval()
+        model = model.to(args.device).eval()
         print(
             f"AdaRound finished. Encodings saved under: "
             f"{os.path.join(args.adaround_path, args.adaround_prefix)}*.encodings"
