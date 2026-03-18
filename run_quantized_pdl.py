@@ -219,6 +219,7 @@ def main(args):
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
         model=wrapped_model,
+        model_category_const=model_category_const,
         device=args.device,
         image_height=args.image_height,
         image_width=args.image_width,

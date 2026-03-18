@@ -45,6 +45,7 @@ class AimetTraceWrapper(nn.Module):
 
 def create_quant_sim(
     model,
+    model_category_const,
     device,
     image_height,
     image_width,
@@ -55,7 +56,7 @@ def create_quant_sim(
 ):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
-    # wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
+    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
     model.eval()
 
     sim = QuantizationSimModel(
@@ -106,7 +107,7 @@ def quantize_model_with_aimet(
 
     sim, _ = create_quant_sim(
         model=model,
-        # model_category_const=model_category_const,
+        model_category_const=model_category_const,
         device=device,
         image_height=image_height,
         image_width=image_width,
@@ -185,7 +186,7 @@ def load_aimet_quantized_model(
 
     sim, _ = create_quant_sim(
         model=model,
-        # model_category_const=model_category_const,
+        model_category_const=model_category_const,
         device=device,
         image_height=image_height,
         image_width=image_width,
