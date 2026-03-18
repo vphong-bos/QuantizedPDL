@@ -25,18 +25,15 @@ class StemBlock(nn.Module):
 
         # Create conv1 with norm as a submodule to match state dict structure
         self.conv1 = nn.Conv2d(3, 64, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1), bias=False)
-        self.bn1 = nn.SyncBatchNorm(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-        self.relu1 = nn.ReLU()
+        self.conv1.norm = nn.SyncBatchNorm(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
 
         # Create conv2 with norm as a submodule to match state dict structure
         self.conv2 = nn.Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-        self.bn2 = nn.SyncBatchNorm(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-        self.relu2 = nn.ReLU()
+        self.conv2.norm = nn.SyncBatchNorm(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
 
         # Create conv3 with norm as a submodule to match state dict structure
         self.conv3 = nn.Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1), bias=False)
-        self.bn3 = nn.SyncBatchNorm(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-        self.relu3 = nn.ReLU()
+        self.conv3.norm = nn.SyncBatchNorm(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
 
         # Max pooling layer
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, dilation=1, ceil_mode=False)
@@ -44,18 +41,18 @@ class StemBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Conv1 + BatchNorm + ReLU
         x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu1(x)
+        x = self.conv1.norm(x)
+        x = F.relu(x)
 
         # Conv2 + BatchNorm + ReLU
         x = self.conv2(x)
-        x = self.bn2(x)
-        x = self.relu2(x)
+        x = self.conv2.norm(x)
+        x = F.relu(x)
 
         # Conv3 + BatchNorm + ReLU
         x = self.conv3(x)
-        x = self.bn3(x)
-        x = self.relu3(x)
+        x = self.conv3.norm(x)
+        x = F.relu(x)
 
         # Max pooling with kernel_size=3, stride=2, padding=1
         x = self.maxpool(x)

@@ -65,14 +65,23 @@ def pearson_corrcoef(x: torch.Tensor, y: torch.Tensor, eps: float = 1e-8) -> tor
     x = x.float().reshape(-1)
     y = y.float().reshape(-1)
 
+    if torch.isnan(x).any() or torch.isnan(y).any():
+        print("found nan")
+        return torch.tensor(0.0, device=x.device)
+
     x = x - x.mean()
     y = y - y.mean()
 
     denom = torch.sqrt((x * x).sum()) * torch.sqrt((y * y).sum())
-    if denom.abs() < eps:
+    if torch.isnan(denom) or denom.abs() < eps:
         return torch.tensor(0.0, device=x.device)
 
-    return (x * y).sum() / (denom + eps)
+    corr = (x * y).sum() / (denom + eps)
+    if torch.isnan(corr):
+        print("found nan")
+        return torch.tensor(0.0, device=x.device)
+
+    return corr
 
 
 @torch.no_grad()

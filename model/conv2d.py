@@ -68,20 +68,34 @@ class Conv2d(torch.nn.Conv2d):
         self.activation = activation
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass with conv2d, optional norm, and optional activation.
+
+        Args:
+            x: Input tensor
+
+        Returns:
+            Output tensor after convolution, normalization, and activation
+        """
+        # Handle empty inputs for compatibility (from original implementation)
         if not torch.jit.is_scripting():
             is_dynamo_compiling = _check_if_dynamo_compiling()
             if not is_dynamo_compiling:
                 with warnings.catch_warnings(record=True):
-                    if self.training:
+                    if x.numel() == 0 and self.training:
+                        # https://github.com/pytorch/pytorch/issues/12013
                         assert not isinstance(
                             self.norm, torch.nn.SyncBatchNorm
                         ), "SyncBatchNorm does not support empty inputs!"
 
-        x = super().forward(x)
+        # Standard conv2d operation
+        x = F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
+        # Apply normalization if provided
         if self.norm is not None:
             x = self.norm(x)
 
+        # Apply activation if provided
         if self.activation is not None:
             x = self.activation(x)
 

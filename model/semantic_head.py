@@ -13,7 +13,6 @@ from torch.nn import functional as F
 from model.aspp import ASPP, get_norm
 from model.conv2d import Conv2d
 
-
 class ShapeSpec:
     """
     A simple structure that contains basic shape specification about a tensor.

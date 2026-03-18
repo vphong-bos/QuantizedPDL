@@ -8,15 +8,15 @@ import torch
 from model.pdl import build_model
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
-from quantization.quantize_function import AimetTraceWrapper
+from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
 
-from aimet_torch.cross_layer_equalization import equalize_model
-from aimet_torch.auto_quant import AutoQuant
+# from aimet_torch.cross_layer_equalization import equalize_model
+# from aimet_torch.auto_quant import AutoQuant
 
 from utils.image_loader import load_images
 
-from evaluation.eval_dataset import build_eval_loader
-from evaluation.eval_metrics import evaluate_model
+# from evaluation.eval_dataset import build_eval_loader
+# from evaluation.eval_metrics import evaluate_model
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
@@ -102,25 +102,25 @@ def main(args):
     )
 
     # print("Applying Cross-Layer Equalization...")
-    # wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+    wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
 
-    from aimet_torch.model_preparer import prepare_model
-    from aimet_torch.model_validator.model_validator import ModelValidator
-    model.eval()
-    wrapped_model = AimetTraceWrapper(model, model_category_const).to(args.device).eval()
-    dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
+    # from aimet_torch.model_preparer import prepare_model
+    # from aimet_torch.model_validator.model_validator import ModelValidator
+    # model.eval()
+    # wrapped_model = AimetTraceWrapper(model, model_category_const).to(args.device).eval()
+    # dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
 
-    print("=== Running AIMET ModelValidator on original wrapped model ===")
-    is_valid = ModelValidator.validate_model(wrapped_model, model_input=dummy_input)
-    print("Model valid:", is_valid)
+    # print("=== Running AIMET ModelValidator on original wrapped model ===")
+    # is_valid = ModelValidator.validate_model(wrapped_model, model_input=dummy_input)
+    # print("Model valid:", is_valid)
 
-    print("=== Running AIMET prepare_model manually ===")
-    prepared = prepare_model(wrapped_model)
-    prepared.eval()
+    # print("=== Running AIMET prepare_model manually ===")
+    # prepared = prepare_model(wrapped_model)
+    # prepared.eval()
 
-    print("=== Running AIMET ModelValidator on prepared model ===")
-    is_valid_prepared = ModelValidator.validate_model(prepared, model_input=dummy_input)
-    print("Prepared model valid:", is_valid_prepared)
+    # print("=== Running AIMET ModelValidator on prepared model ===")
+    # is_valid_prepared = ModelValidator.validate_model(prepared, model_input=dummy_input)
+    # print("Prepared model valid:", is_valid_prepared)
 
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
@@ -138,59 +138,102 @@ def main(args):
         std=[0.229, 0.224, 0.225],
     )
 
-    print("Building validation loader...")
-    eval_loader = build_eval_loader(
-        cityscapes_root=args.cityscapes_root,
-        image_width=args.image_width,
+    print("Creating AIMET QuantizationSimModel...")
+    sim, _ = create_quant_sim(
+        model=model,
+        model_category_const=model_category_const,
+        device=args.device,
         image_height=args.image_height,
-        batch_size=1,
-        num_workers=args.num_workers,
-    )
-
-    print("Creating AutoQuant...")
-    dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
-
-    def eval_callback(candidate_model, num_samples=None):
-        candidate_model.eval()
-        results = evaluate_model(
-            model=candidate_model,
-            model_category_const=model_category_const,
-            loader=eval_loader,
-            device=args.device,
-            max_samples=-1 if num_samples is None else num_samples,
-        )
-        return results["mIoU"]
-
-    auto_quant = AutoQuant(
-        model=wrapped_model,
-        dummy_input=dummy_input,
-        data_loader=calib_loader,
-        eval_callback=eval_callback,
-        param_bw=args.default_param_bw,
-        output_bw=args.default_output_bw,
+        image_width=args.image_width,
         quant_scheme=args.quant_scheme,
-        results_dir=results_dir,
-        strict_validation=False,
+        default_output_bw=args.default_output_bw,
+        default_param_bw=args.default_param_bw,
     )
 
-    print("Running AutoQuant...")
-    aq_start = time.time()
-    best_model, best_score, encoding_path = auto_quant.optimize(
-        allowed_accuracy_drop=args.allowed_accuracy_drop
+    print("Computing encodings with calibration data...")
+    calib_start = time.time()
+    sim.compute_encodings(
+        forward_pass_callback=calibration_forward_pass,
+        forward_pass_callback_args=(calib_loader, args.device),
     )
-    aq_time = time.time() - aq_start
-    print(f"AutoQuant finished in {aq_time:.2f} s")
+    calib_time = time.time() - calib_start
+    print(f"Calibration finished in {calib_time:.2f} s")
 
-    if best_model is None:
-        print("AutoQuant did not return a best_model. Falling back to W32A8 sim.")
-        sim, w32a8_score = auto_quant.run_inference()
-        print(f"W32A8 score: {w32a8_score}")
-        quantized_model = sim.model
-        encoding_path = None
-    else:
-        quantized_model = best_model
-
+    quantized_model = sim.model
     quantized_model.eval()
+
+    if args.save_quant_checkpoint is not None:
+        torch.save(
+            {"state_dict": quantized_model.state_dict()},
+            args.save_quant_checkpoint,
+        )
+        print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
+
+    if not args.no_export:
+        print("Exporting quantized model and encodings...")
+        sim.model.cpu().eval()
+        cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
+
+        sim.export(
+            path=args.export_path,
+            filename_prefix=args.export_prefix,
+            dummy_input=cpu_dummy_input,
+        )
+        print(f"Exported files to: {args.export_path}")
+
+    # print("Building validation loader...")
+    # eval_loader = build_eval_loader(
+    #     cityscapes_root=args.cityscapes_root,
+    #     image_width=args.image_width,
+    #     image_height=args.image_height,
+    #     batch_size=1,
+    #     num_workers=args.num_workers,
+    # )
+
+    # print("Creating AutoQuant...")
+    # dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
+
+    # def eval_callback(candidate_model, num_samples=None):
+    #     candidate_model.eval()
+    #     results = evaluate_model(
+    #         model=candidate_model,
+    #         model_category_const=model_category_const,
+    #         loader=eval_loader,
+    #         device=args.device,
+    #         max_samples=-1 if num_samples is None else num_samples,
+    #     )
+    #     return results["mIoU"]
+
+    # auto_quant = AutoQuant(
+    #     model=wrapped_model,
+    #     dummy_input=dummy_input,
+    #     data_loader=calib_loader,
+    #     eval_callback=eval_callback,
+    #     param_bw=args.default_param_bw,
+    #     output_bw=args.default_output_bw,
+    #     quant_scheme=args.quant_scheme,
+    #     results_dir=results_dir,
+    #     strict_validation=False,
+    # )
+
+    # print("Running AutoQuant...")
+    # aq_start = time.time()
+    # best_model, best_score, encoding_path = auto_quant.optimize(
+    #     allowed_accuracy_drop=args.allowed_accuracy_drop
+    # )
+    # aq_time = time.time() - aq_start
+    # print(f"AutoQuant finished in {aq_time:.2f} s")
+
+    # if best_model is None:
+    #     print("AutoQuant did not return a best_model. Falling back to W32A8 sim.")
+    #     sim, w32a8_score = auto_quant.run_inference()
+    #     print(f"W32A8 score: {w32a8_score}")
+    #     quantized_model = sim.model
+    #     encoding_path = None
+    # else:
+    #     quantized_model = best_model
+
+    # quantized_model.eval()
 
     # if args.save_quant_checkpoint is not None:
     #     torch.save(

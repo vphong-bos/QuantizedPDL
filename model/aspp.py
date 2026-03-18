@@ -158,16 +158,14 @@ class ASPP(nn.Module):
             activation=deepcopy(activation),
         )
 
-        self.dropout_layer = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
-
     def forward(self, x):
         size = x.shape[-2:]
-        # if self.pool_kernel_size is not None:
-        #     if size[0] % self.pool_kernel_size[0] or size[1] % self.pool_kernel_size[1]:
-        #         raise ValueError(
-        #             "`pool_kernel_size` must be divisible by the shape of inputs. "
-        #             "Input size: {} `pool_kernel_size`: {}".format(size, self.pool_kernel_size)
-        #         )
+        if self.pool_kernel_size is not None:
+            if size[0] % self.pool_kernel_size[0] or size[1] % self.pool_kernel_size[1]:
+                raise ValueError(
+                    "`pool_kernel_size` must be divisible by the shape of inputs. "
+                    "Input size: {} `pool_kernel_size`: {}".format(size, self.pool_kernel_size)
+                )
         res = []
 
         # Process first 4 convs (1x1 + 3 dilated convs)
@@ -183,6 +181,6 @@ class ASPP(nn.Module):
 
         res = self.project(res)
 
-        res = self.dropout_layer(res)
-        
+        res = F.dropout(res, self.dropout, training=self.training) if self.dropout > 0 else res
+
         return res

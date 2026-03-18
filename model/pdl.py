@@ -174,7 +174,7 @@ class PytorchPanopticDeepLab(nn.Module):
                 for old_prefix, new_prefix in key_mappings.items():
                     if key.startswith(old_prefix):
                         mapped_key = key.replace(old_prefix, new_prefix, 1)
-                        # logger.debug(f"Remapped key: {key} -> {mapped_key}")
+                        logger.debug(f"Remapped key: {key} -> {mapped_key}")
                         break
 
                 # Convert NumPy arrays to PyTorch tensors
@@ -182,7 +182,7 @@ class PytorchPanopticDeepLab(nn.Module):
                     if not isinstance(value, torch.Tensor):
                         # Convert NumPy array to PyTorch tensor
                         converted_state_dict[mapped_key] = torch.from_numpy(value)
-                        # logger.debug(f"Converted {mapped_key} from NumPy to PyTorch tensor")
+                        logger.debug(f"Converted {mapped_key} from NumPy to PyTorch tensor")
                     else:
                         converted_state_dict[mapped_key] = value
                 else:
@@ -195,23 +195,52 @@ class PytorchPanopticDeepLab(nn.Module):
 
             # Always fuse ImageNet normalization into stem.conv1 weights
             # This is the single point where normalization fusion happens
-            from model.preprocessing import fuse_imagenet_normalization
+            from models.bos_model.panoptic_deeplab.reference.pytorch_preprocessing import fuse_imagenet_normalization
 
             fuse_imagenet_normalization(self)
         except Exception as e:
             logger.error(f"Failed to load weights from {weights_path}: {e}")
             raise
 
-    def forward(self, x, ):
-        features = self.backbone(x)
+    def forward(
+        self, x, return_features: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[Dict[str, torch.Tensor]]]:
+        """
+        Forward pass through the complete PyTorch Panoptic-DeepLab model.
 
+        Args:
+            x: Input tensor [B, C, H, W] or dictionary of backbone features
+            return_features: Whether to return intermediate backbone features
+
+        Returns:
+            Tuple containing:
+            - semantic_logits: Semantic segmentation predictions [B, num_classes, H, W]
+            - center_heatmap: Instance center predictions [B, 1, H, W]
+            - offset_map: Instance offset predictions [B, 2, H, W]
+            - features: Optional backbone features if return_features=True
+        """
+        # Handle both input tensor and pre-computed features
+        if isinstance(x, dict):
+            # Pre-computed features passed directly
+            features = x
+        else:
+            # Raw input tensor - run through backbone
+            features = self.backbone(x)
+
+        # Get semantic segmentation predictions
         semantic_logits, _ = self.semantic_head(features)
 
         if self.model_category == DEEPLAB_V3_PLUS:
-            return semantic_logits
+            # Get instance embedding predictions
+            center_heatmap, offset_map = None, None
+        else:
+            center_heatmap, offset_map, _, _ = self.instance_head(features)
 
-        center_heatmap, offset_map = self.instance_head(features)
-        return semantic_logits, center_heatmap, offset_map
+        # Return predictions and optionally features
+        if return_features:
+            return semantic_logits, center_heatmap, offset_map, features
+        else:
+            return semantic_logits, center_heatmap, offset_map, None
 
     def inference(
         self,
@@ -276,39 +305,21 @@ class PytorchPanopticDeepLab(nn.Module):
         }
 
 
-# def create_pytorch_panoptic_deeplab_model(
-#     num_classes: int = 19, use_real_weights: bool = True, weights_path: Optional[str] = None, **kwargs
-# ) -> PytorchPanopticDeepLab:
-#     """
-#     Factory function to create a PyTorch Panoptic-DeepLab model with default configuration.
+def create_pytorch_panoptic_deeplab_model(
+    num_classes: int = 19, use_real_weights: bool = True, weights_path: Optional[str] = None, **kwargs
+) -> PytorchPanopticDeepLab:
+    """
+    Factory function to create a PyTorch Panoptic-DeepLab model with default configuration.
 
-#     Args:
-#         num_classes: Number of semantic classes
-#         use_real_weights: Whether to use pre-trained weights
-#         weights_path: Path to complete model weights (e.g., model_final_bd324a.pkl)
-#         **kwargs: Additional model configuration parameters
+    Args:
+        num_classes: Number of semantic classes
+        use_real_weights: Whether to use pre-trained weights
+        weights_path: Path to complete model weights (e.g., model_final_bd324a.pkl)
+        **kwargs: Additional model configuration parameters
 
-#     Returns:
-#         Configured PytorchPanopticDeepLab model
-#     """
-#     return PytorchPanopticDeepLab(
-#         num_classes=num_classes, use_real_weights=use_real_weights, weights_path=weights_path, **kwargs
-#     )
-
-def build_model(weights_path, model_category, image_height, image_width, device):
-    model_category_const = PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
-
-    model = PytorchPanopticDeepLab(
-        num_classes=19,
-        common_stride=4,
-        project_channels=[32, 64],
-        decoder_channels=[256, 256, 256],
-        sem_seg_head_channels=256,
-        ins_embed_head_channels=32,
-        train_size=(image_height, image_width),
-        weights_path=weights_path,
-        model_category=model_category_const,
+    Returns:
+        Configured PytorchPanopticDeepLab model
+    """
+    return PytorchPanopticDeepLab(
+        num_classes=num_classes, use_real_weights=use_real_weights, weights_path=weights_path, **kwargs
     )
-    model = model.to(device=device, dtype=torch.float32)
-    model.eval()
-    return model, model_category_const
