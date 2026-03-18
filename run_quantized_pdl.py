@@ -202,9 +202,9 @@ def main(args):
             forward_fn=adaround_forward_fn,
         )
 
-        model = model.cpu().eval()
-        model = Adaround.apply_adaround(
-            model=model,
+        wrapped_model = wrapped_model.cpu().eval()
+        wrapped_model = Adaround.apply_adaround(
+            model=wrapped_model,
             dummy_input=dummy_input_cpu,
             params=adaround_params,
             path=args.adaround_path,
@@ -214,7 +214,7 @@ def main(args):
             default_config_file=args.config_file,
         )
 
-        model = model.to(args.device).eval()
+        wrapped_model = wrapped_model.to(args.device).eval()
         print(
             f"AdaRound finished. Encodings saved under: "
             f"{os.path.join(args.adaround_path, args.adaround_prefix)}*.encodings"
