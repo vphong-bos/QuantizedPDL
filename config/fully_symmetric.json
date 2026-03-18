@@ -1,7 +1,6 @@
 {
   "defaults": {
     "ops": {
-      "is_input_quantized": "True",
       "is_output_quantized": "True",
       "is_symmetric": "True"
     },
@@ -16,9 +15,6 @@
   "params": {},
   "op_type": {},
   "supergroups": [],
-  "model_input": {
-    "is_input_quantized": "True"
-  },
   "model_output": {
     "is_output_quantized": "True"
   }
