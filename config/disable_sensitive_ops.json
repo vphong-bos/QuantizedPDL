@@ -1,14 +1,19 @@
 {
   "defaults": {
     "ops": {
+      "is_input_quantized": "True",
       "is_output_quantized": "True",
       "is_symmetric": "False"
     },
     "params": {
       "is_quantized": "True",
       "is_symmetric": "True"
-    }
+    },
+    "per_channel_quantization": "True",
+    "strict_symmetric": "False",
+    "unsigned_symmetric": "False"
   },
+  "params": {},
   "op_type": {
     "Concat": {
       "is_output_quantized": "False"
@@ -16,5 +21,12 @@
     "Resize": {
       "is_output_quantized": "False"
     }
+  },
+  "supergroups": [],
+  "model_input": {
+    "is_input_quantized": "True"
+  },
+  "model_output": {
+    "is_output_quantized": "True"
   }
 }
