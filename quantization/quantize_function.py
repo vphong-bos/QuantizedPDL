@@ -147,19 +147,22 @@ def load_aimet_quantized_model(
     # ------------------------------------------------------------------
     # Case 1: AutoQuant/AIMET exported PyTorch model object (.pth is a Module)
     # ------------------------------------------------------------------
-    if isinstance(loaded_obj, torch.nn.Module):
-        print("[load] Loaded Module object from .pth; extracting state_dict and rebuilding QuantSim")
-        state_dict = loaded_obj.state_dict()
-    elif isinstance(loaded_obj, dict):
+    # Extract state_dict from checkpoint-like object
+    if isinstance(loaded_obj, dict):
         if "state_dict" in loaded_obj:
             state_dict = loaded_obj["state_dict"]
         elif "model_state_dict" in loaded_obj:
             state_dict = loaded_obj["model_state_dict"]
-        elif "model" in loaded_obj and isinstance(loaded_obj["model"], torch.nn.Module):
+        elif "model" in loaded_obj and hasattr(loaded_obj["model"], "state_dict"):
             print("[load] Checkpoint contains model object in key 'model'; extracting state_dict")
             state_dict = loaded_obj["model"].state_dict()
         else:
             state_dict = loaded_obj
+
+    elif hasattr(loaded_obj, "state_dict"):
+        print(f"[load] Loaded object of type {type(loaded_obj)}; extracting state_dict")
+        state_dict = loaded_obj.state_dict()
+
     else:
         raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
 
