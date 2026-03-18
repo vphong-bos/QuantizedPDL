@@ -182,7 +182,7 @@ class PytorchPanopticDeepLab(nn.Module):
                     if not isinstance(value, torch.Tensor):
                         # Convert NumPy array to PyTorch tensor
                         converted_state_dict[mapped_key] = torch.from_numpy(value)
-                        logger.debug(f"Converted {mapped_key} from NumPy to PyTorch tensor")
+                        # logger.debug(f"Converted {mapped_key} from NumPy to PyTorch tensor")
                     else:
                         converted_state_dict[mapped_key] = value
                 else:
@@ -195,7 +195,7 @@ class PytorchPanopticDeepLab(nn.Module):
 
             # Always fuse ImageNet normalization into stem.conv1 weights
             # This is the single point where normalization fusion happens
-            from models.bos_model.panoptic_deeplab.reference.pytorch_preprocessing import fuse_imagenet_normalization
+            from model.preprocessing import fuse_imagenet_normalization
 
             fuse_imagenet_normalization(self)
         except Exception as e:
