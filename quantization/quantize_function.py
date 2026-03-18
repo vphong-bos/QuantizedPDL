@@ -187,7 +187,8 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    # Fix keys to match sim.model
+    target_keys = set(sim.model.state_dict().keys())
+    
     fixed_sd = {}
     for k, v in state_dict.items():
         nk = k
@@ -195,8 +196,12 @@ def load_aimet_quantized_model(
             nk = nk[len("module."):]
         if not nk.startswith("model."):
             nk = "model." + nk
-        fixed_sd[nk] = v
-
+    
+        if nk in target_keys:
+            fixed_sd[nk] = v
+        else:
+            print(f"[load] dropping unmatched checkpoint key: {nk}")
+            
     missing, unexpected = sim.model.load_state_dict(fixed_sd, strict=False)
     print(f"[load] missing keys: {len(missing)}")
     print(f"[load] unexpected keys: {len(unexpected)}")
