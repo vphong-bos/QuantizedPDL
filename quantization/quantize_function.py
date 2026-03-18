@@ -184,14 +184,14 @@ def load_aimet_quantized_model(
         print("[load] first unexpected keys:", unexpected[:10])
 
     sim, _ = create_quant_sim(
-        model,
-        model_category_const,
-        device,
-        image_height,
-        image_width,
-        quant_scheme,
-        default_output_bw,
-        default_param_bw,
+        model=model,
+        model_category_const=model_category_const,
+        device=device,
+        image_height=image_height,
+        image_width=image_width,
+        quant_scheme=quant_scheme,
+        default_output_bw=default_output_bw,
+        default_param_bw=default_param_bw,
     )
 
     sim.load_encodings(encoding_path)
