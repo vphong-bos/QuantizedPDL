@@ -45,7 +45,6 @@ class AimetTraceWrapper(nn.Module):
 
 def create_quant_sim(
     model,
-    model_category_const,
     device,
     image_height,
     image_width,
@@ -56,11 +55,11 @@ def create_quant_sim(
 ):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
-    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
-    wrapped_model.eval()
+    # wrapped_model = AimetTraceWrapper(model, model_category_const).to(device)
+    model.eval()
 
     sim = QuantizationSimModel(
-        model=wrapped_model,
+        model=model,
         dummy_input=dummy_input,
         quant_scheme=quant_scheme,
         default_output_bw=default_output_bw,
@@ -123,11 +122,47 @@ def quantize_model_with_aimet(
 
     return sim
 
-def load_aimet_quantized_model(quant_weights, model_category, device):
-    sim = quantsim.load_checkpoint(quant_weights)
+def load_aimet_quantized_model(
+        quant_weights, 
+        encoding_path, 
+        model_category, 
+        image_height, 
+        image_width, 
+        device,    
+        quant_scheme="tf_enhanced",
+        default_output_bw=8,
+        default_param_bw=8,):
+    if not encoding_path:
+        sim = quantsim.load_checkpoint(quant_weights)
+    else:
+        model, category = build_model(
+            weights_path=None,
+            model_category=model_category,
+            image_height=image_height,
+            image_width=image_width,
+            device=device,
+        )
+
+        model.load_state_dict(torch.load(quant_weights, map_location="cpu"))
+        model.eval()
+
+        sim, _ = create_quant_sim(
+            model,
+            model_category_const,
+            device,
+            image_height,
+            image_width,
+            quant_scheme,
+            default_output_bw,
+            default_param_bw,
+        )
+
+        sim.load_encodings(encoding_path, strict = True)
+
     sim.model.to(device).eval()
 
     model_category_const = (
         PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
     )
     return sim.model, model_category_const
+
