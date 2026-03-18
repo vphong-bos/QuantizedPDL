@@ -144,10 +144,7 @@ def load_aimet_quantized_model(
 
     loaded_obj = torch.load(quant_weights, map_location=device, weights_only=False)
 
-    # ------------------------------------------------------------------
-    # Case 1: AutoQuant/AIMET exported PyTorch model object (.pth is a Module)
-    # ------------------------------------------------------------------
-    # Extract state_dict from checkpoint-like object
+    # Extract state_dict once
     if isinstance(loaded_obj, dict):
         if "state_dict" in loaded_obj:
             state_dict = loaded_obj["state_dict"]
@@ -166,9 +163,10 @@ def load_aimet_quantized_model(
     else:
         raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
 
-    # ------------------------------------------------------------------
-    # Case 2: Need to recreate QuantSim and load state_dict + encodings
-    # ------------------------------------------------------------------
+    if not isinstance(state_dict, dict):
+        raise ValueError(f"Loaded state_dict is not a dict: {type(state_dict)}")
+
+    # Recreate model + sim
     model, model_category_const = build_model(
         weights_path=None,
         model_category=model_category,
@@ -189,26 +187,7 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    # Extract state_dict from checkpoint-like object
-    if isinstance(loaded_obj, dict):
-        if "state_dict" in loaded_obj:
-            state_dict = loaded_obj["state_dict"]
-        elif "model_state_dict" in loaded_obj:
-            state_dict = loaded_obj["model_state_dict"]
-        elif "model" in loaded_obj and isinstance(loaded_obj["model"], torch.nn.Module):
-            print("[load] Checkpoint contains full model object in key 'model'")
-            model = loaded_obj["model"].to(device).eval()
-            return model, model_category_const
-        else:
-            state_dict = loaded_obj
-    else:
-        raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
-
-    if not isinstance(state_dict, dict):
-        raise ValueError(f"Loaded state_dict is not a dict: {type(state_dict)}")
-
     # Fix keys to match sim.model
-    # sim.model usually expects keys prefixed with "model."
     fixed_sd = {}
     for k, v in state_dict.items():
         nk = k
@@ -226,7 +205,6 @@ def load_aimet_quantized_model(
     if unexpected:
         print("[load] first unexpected keys:", unexpected[:10])
 
-    # Load encodings from AutoQuant artifact
     sim.set_and_freeze_param_encodings(encoding_path)
     sim.set_and_freeze_activation_encodings(encoding_path)
     print(f"[load] Loaded encodings from: {encoding_path}")
