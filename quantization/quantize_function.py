@@ -145,55 +145,47 @@ def load_aimet_quantized_model(
         PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
     )
 
-    # Case 1: saved full model / wrapper object
-    if hasattr(loaded_obj, "to") and hasattr(loaded_obj, "eval"):
+    if isinstance(loaded_obj, dict) and "state_dict" in loaded_obj:
+        state_dict = loaded_obj["state_dict"]
+    elif isinstance(loaded_obj, dict) and "model_state_dict" in loaded_obj:
+        state_dict = loaded_obj["model_state_dict"]
+    elif hasattr(loaded_obj, "state_dict"):
         print(f"[load] Loaded model object directly: {type(loaded_obj)}")
-        model = loaded_obj.to(device).eval()
-        return model, model_category_const
+        return loaded_obj.to(device).eval(), model_category_const
+    else:
+        raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
 
-    # Case 2: checkpoint/state_dict only -> rebuild model and load weights
-    if isinstance(loaded_obj, dict):
-        if "state_dict" in loaded_obj:
-            state_dict = loaded_obj["state_dict"]
-        elif "model_state_dict" in loaded_obj:
-            state_dict = loaded_obj["model_state_dict"]
-        elif "model" in loaded_obj and hasattr(loaded_obj["model"], "to"):
-            print("[load] Loaded model object from checkpoint['model']")
-            model = loaded_obj["model"].to(device).eval()
-            return model, model_category_const
-        else:
-            state_dict = loaded_obj
+    # Rebuild base model
+    model, _ = build_model(
+        weights_path=None,
+        model_category=model_category,
+        image_height=image_height,
+        image_width=image_width,
+        device=device,
+    )
+    model.eval()
 
-        model, _ = build_model(
-            weights_path=None,
-            model_category=model_category,
-            image_height=image_height,
-            image_width=image_width,
-            device=device,
-            # quant_scheme="tf_enhanced",
-            # default_output_bw=8,
-            # default_param_bw=8,
-        )
-        model = model.to(device).eval()
+    # Rebuild AIMET wrapper + sim
+    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device).eval()
 
-        cleaned_sd = {}
-        target_keys = set(model.state_dict().keys())
+    dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
+    sim = QuantizationSimModel(
+        model=wrapped_model,
+        dummy_input=dummy_input,
+        quant_scheme=quant_scheme,
+        default_output_bw=default_output_bw,
+        default_param_bw=default_param_bw,
+    )
 
-        for k, v in state_dict.items():
-            nk = k
-            if nk.startswith("module."):
-                nk = nk[len("module."):]
-            if nk in target_keys:
-                cleaned_sd[nk] = v
+    # Load into sim.model, not plain model
+    missing, unexpected = sim.model.load_state_dict(state_dict, strict=False)
 
-        missing, unexpected = model.load_state_dict(cleaned_sd, strict=False)
-        print(f"[load] missing keys: {len(missing)}")
-        print(f"[load] unexpected keys: {len(unexpected)}")
-        if missing:
-            print("[load] first missing keys:", missing[:10])
-        if unexpected:
-            print("[load] first unexpected keys:", unexpected[:10])
+    print(f"[load] missing keys: {len(missing)}")
+    print(f"[load] unexpected keys: {len(unexpected)}")
+    if missing:
+        print("[load] first missing keys:", missing[:10])
+    if unexpected:
+        print("[load] first unexpected keys:", unexpected[:10])
 
-        return model, model_category_const
-
-    raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
+    sim.model.eval()
+    return sim.model, model_category_const
