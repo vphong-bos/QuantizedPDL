@@ -191,6 +191,13 @@ def main(args):
         std=[0.229, 0.224, 0.225],
     )
 
+    print("Wrapping model for AIMET tracing...")
+    wrapped_model = AimetTraceWrapper(
+        model=model,
+        model_category_const=model_category_const,
+    ).to(args.device).eval()
+
+
     if args.enable_adaround:
         print("Applying AdaRound...")
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
@@ -221,12 +228,6 @@ def main(args):
         )
     else:
         print("AdaRound disabled")
-
-    print("Wrapping model for AIMET tracing...")
-    wrapped_model = AimetTraceWrapper(
-        model=model,
-        model_category_const=model_category_const,
-    ).to(args.device).eval()
 
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
