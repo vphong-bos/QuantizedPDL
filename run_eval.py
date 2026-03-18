@@ -24,8 +24,7 @@ def parse_args():
                         help="Path to FP32 .pkl weights")
     parser.add_argument("--quant_weights", type=str, required=True,
                         help="Path to quantized .pt/.pth model weight checkpoint")
-    parser.add_argument("--encoding_path", type=str,
-                          help="Path to saved encoding path")
+    parser.add_argument("--encoding_path", type=str, help="Path to saved encoding path")
 
     parser.add_argument("--model_category", type=str, default="PANOPTIC_DEEPLAB",
                         choices=["DEEPLAB_V3_PLUS", "PANOPTIC_DEEPLAB"])
