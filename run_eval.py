@@ -24,8 +24,8 @@ def parse_args():
                         help="Path to FP32 .pkl weights")
     parser.add_argument("--quant_weights", type=str, required=True,
                         help="Path to quantized .pt/.pth model weight checkpoint")
-    # parser.add_argument("--encoding_path", type=str, required=True,
-    #                      help="Path to saved encoding path")
+    parser.add_argument("--encoding_path", type=str,
+                          help="Path to saved encoding path")
 
     parser.add_argument("--model_category", type=str, default="PANOPTIC_DEEPLAB",
                         choices=["DEEPLAB_V3_PLUS", "PANOPTIC_DEEPLAB"])
@@ -38,6 +38,8 @@ def parse_args():
                         help="Use only first N val images, -1 for full val")
     parser.add_argument("--split", type=str, default="val",
                         choices=["test", "val"])
+    parser.add_argument("--default_output_bw", type=int, default=8, help="activation bitwidth")
+    parser.add_argument("--default_param_bw", type=int, default=8, help="parameter bitwidth")
 
     return parser.parse_args()
 
@@ -74,14 +76,14 @@ def main():
     print("Loading quantized model...")
     quant_model, quant_category = load_aimet_quantized_model(
         quant_weights=args.quant_weights,
-        # encoding_path=args.encoding_path,
+        encoding_path=args.encoding_path,
         model_category=args.model_category,
-        # image_height=args.image_height,
-        # image_width=args.image_width,
+        image_height=args.image_height,
+        image_width=args.image_width,
         device=args.device,
-        # quant_scheme="tf_enhanced",
-        # default_output_bw=8,
-        # default_param_bw=8,
+        quant_scheme="tf_enhanced",
+        default_output_bw=8,
+        default_param_bw=8
     )
 
     print("Evaluating quantized...")
