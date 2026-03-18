@@ -154,11 +154,17 @@ def main(args):
         from aimet_torch.cross_layer_equalization import equalize_model
 
         cle_start = time.time()
-        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
         model = model.cpu().eval()
+        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
+
+        cle_wrapper = AimetTraceWrapper(
+            model=model,
+            model_category_const=model_category_const,
+        ).cpu().eval()
+
         equalize_model(
-            model,
+            cle_wrapper,
             input_shapes=(1, 3, args.image_height, args.image_width),
             dummy_input=dummy_input_cpu,
         )
