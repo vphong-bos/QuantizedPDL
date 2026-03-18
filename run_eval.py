@@ -74,7 +74,7 @@ def main():
     print("Loading quantized model...")
     quant_model, quant_category = load_aimet_quantized_model(
         quant_weights=args.quant_weights,
-        encoding_path=args.encoding_path,
+        # encoding_path=args.encoding_path,
         model_category=args.model_category,
         image_height=args.image_height,
         image_width=args.image_width,
