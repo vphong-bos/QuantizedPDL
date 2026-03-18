@@ -1,5 +1,6 @@
 import torch
 import os
+from aimet_torch import quantsim
 from torch.utils.data import DataLoader, Dataset
 from aimet_torch.quantsim import QuantizationSimModel
 import torchvision.transforms as T
@@ -122,70 +123,11 @@ def quantize_model_with_aimet(
 
     return sim
 
-import os
-
-def load_aimet_quantized_model(
-    quant_weights,
-    model_category,
-    image_height,
-    image_width,
-    device,
-    quant_scheme="tf_enhanced",
-    default_output_bw=8,
-    default_param_bw=8,
-):
-    print("Loading quantized model from .pth only...")
-
-    if not os.path.exists(quant_weights):
-        raise FileNotFoundError(f"Quantized weights file not found: {quant_weights}")
-
-    loaded_obj = torch.load(quant_weights, map_location=device, weights_only=False)
+def load_aimet_quantized_model(quant_checkpoint, model_category, device):
+    sim = quantsim.load_checkpoint(quant_checkpoint)
+    sim.model.to(device).eval()
 
     model_category_const = (
         PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
     )
-
-    if isinstance(loaded_obj, dict) and "state_dict" in loaded_obj:
-        state_dict = loaded_obj["state_dict"]
-    elif isinstance(loaded_obj, dict) and "model_state_dict" in loaded_obj:
-        state_dict = loaded_obj["model_state_dict"]
-    elif hasattr(loaded_obj, "state_dict"):
-        print(f"[load] Loaded model object directly: {type(loaded_obj)}")
-        return loaded_obj.to(device).eval(), model_category_const
-    else:
-        raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
-
-    # Rebuild base model
-    model, _ = build_model(
-        weights_path=None,
-        model_category=model_category,
-        image_height=image_height,
-        image_width=image_width,
-        device=device,
-    )
-    model.eval()
-
-    # Rebuild AIMET wrapper + sim
-    wrapped_model = AimetTraceWrapper(model, model_category_const).to(device).eval()
-
-    dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
-    sim = QuantizationSimModel(
-        model=wrapped_model,
-        dummy_input=dummy_input,
-        quant_scheme=quant_scheme,
-        default_output_bw=default_output_bw,
-        default_param_bw=default_param_bw,
-    )
-
-    # Load into sim.model, not plain model
-    missing, unexpected = sim.model.load_state_dict(state_dict, strict=False)
-
-    print(f"[load] missing keys: {len(missing)}")
-    print(f"[load] unexpected keys: {len(unexpected)}")
-    if missing:
-        print("[load] first missing keys:", missing[:10])
-    if unexpected:
-        print("[load] first unexpected keys:", unexpected[:10])
-
-    sim.model.eval()
     return sim.model, model_category_const

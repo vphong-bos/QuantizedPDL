@@ -11,6 +11,9 @@ from quantization.calibration_dataset import create_calibration_loader, sample_c
 from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
 from utils.image_loader import load_images
 
+from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_torch import quantsim
+
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
 DEFAULT_EXPORT_PATH = os.path.join(pdl_home_path, "quantized_export")
@@ -81,7 +84,44 @@ def parse_args(argv=None):
     )
     parser.set_defaults(enable_cle=False)
 
+    parser.add_argument(
+        "--enable_adaround",
+        action="store_true",
+        help="apply AIMET AdaRound before creating QuantSim",
+    )
+    parser.add_argument(
+        "--adaround_num_batches",
+        type=int,
+        default=32,
+        help="number of calibration batches to use for AdaRound",
+    )
+    parser.add_argument(
+        "--adaround_num_iterations",
+        type=int,
+        default=10000,
+        help="number of iterations for AdaRound",
+    )
+    parser.add_argument(
+        "--adaround_path",
+        type=str,
+        default=None,
+        help="directory to save AdaRound encodings",
+    )
+    parser.add_argument(
+        "--adaround_prefix",
+        type=str,
+        default="adaround",
+        help="filename prefix for AdaRound encodings",
+    )
+
     return parser.parse_args(argv)
+
+def adaround_forward_fn(model, inputs):
+    if isinstance(inputs, (list, tuple)):
+        images = inputs[0]
+    else:
+        images = inputs
+    return model(images)
 
 
 def main(args):
@@ -94,6 +134,10 @@ def main(args):
             os.makedirs(save_dir, exist_ok=True)
 
     os.makedirs(args.export_path, exist_ok=True)
+
+    if args.adaround_path is None:
+        args.adaround_path = args.export_path
+    os.makedirs(args.adaround_path, exist_ok=True)
 
     print("Loading FP32 model...")
     model, model_category_const = build_model(
@@ -137,6 +181,37 @@ def main(args):
         std=[0.229, 0.224, 0.225],
     )
 
+    if args.enable_adaround:
+        print("Applying AdaRound...")
+        model.cpu().eval()
+        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
+
+        adaround_params = AdaroundParameters(
+            data_loader=calib_loader,
+            num_batches=min(args.adaround_num_batches, len(calib_loader)),
+            default_num_iterations=args.adaround_num_iterations,
+            forward_fn=adaround_forward_fn,
+        )
+
+        model = Adaround.apply_adaround(
+            model=model,
+            dummy_input=dummy_input_cpu,
+            params=adaround_params,
+            path=args.adaround_path,
+            filename_prefix=args.adaround_prefix,
+            default_param_bw=args.default_param_bw,
+            default_quant_scheme=args.quant_scheme,
+            default_config_file=args.config_file,
+        )
+
+        model.to(args.device).eval()
+        print(
+            f"AdaRound finished. Encodings saved under: "
+            f"{os.path.join(args.adaround_path, args.adaround_prefix)}*.encodings"
+        )
+    else:
+        print("AdaRound disabled")
+
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
         model=model,
@@ -163,11 +238,8 @@ def main(args):
     quantized_model.eval()
 
     if args.save_quant_checkpoint is not None:
-        torch.save(
-            {"state_dict": quantized_model.state_dict()},
-            args.save_quant_checkpoint,
-        )
-        print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
+        quantsim.save_checkpoint(sim, args.save_quant_checkpoint)
+        print(f"Saved AIMET sim checkpoint to: {args.save_quant_checkpoint}")
 
     if not args.no_export:
         print("Exporting quantized model and encodings...")
@@ -182,7 +254,6 @@ def main(args):
         print(f"Exported files to: {args.export_path}")
 
     print("Done.")
-
 
 if __name__ == "__main__":
     args = parse_args()

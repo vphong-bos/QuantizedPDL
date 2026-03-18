@@ -76,12 +76,12 @@ def main():
         quant_weights=args.quant_weights,
         # encoding_path=args.encoding_path,
         model_category=args.model_category,
-        image_height=args.image_height,
-        image_width=args.image_width,
+        # image_height=args.image_height,
+        # image_width=args.image_width,
         device=args.device,
-        quant_scheme="tf_enhanced",
-        default_output_bw=8,
-        default_param_bw=8,
+        # quant_scheme="tf_enhanced",
+        # default_output_bw=8,
+        # default_param_bw=8,
     )
 
     print("Evaluating quantized...")
