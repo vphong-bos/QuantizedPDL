@@ -148,10 +148,20 @@ def load_aimet_quantized_model(
     # Case 1: AutoQuant/AIMET exported PyTorch model object (.pth is a Module)
     # ------------------------------------------------------------------
     if isinstance(loaded_obj, torch.nn.Module):
-        print("[load] Loaded exported model object directly from .pth")
-        model = loaded_obj.to(device).eval()
-        model_category_const = PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
-        return model, model_category_const
+        print("[load] Loaded Module object from .pth; extracting state_dict and rebuilding QuantSim")
+        state_dict = loaded_obj.state_dict()
+    elif isinstance(loaded_obj, dict):
+        if "state_dict" in loaded_obj:
+            state_dict = loaded_obj["state_dict"]
+        elif "model_state_dict" in loaded_obj:
+            state_dict = loaded_obj["model_state_dict"]
+        elif "model" in loaded_obj and isinstance(loaded_obj["model"], torch.nn.Module):
+            print("[load] Checkpoint contains model object in key 'model'; extracting state_dict")
+            state_dict = loaded_obj["model"].state_dict()
+        else:
+            state_dict = loaded_obj
+    else:
+        raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
 
     # ------------------------------------------------------------------
     # Case 2: Need to recreate QuantSim and load state_dict + encodings
