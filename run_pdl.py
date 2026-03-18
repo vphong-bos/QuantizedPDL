@@ -51,7 +51,7 @@ def parse_args(argv=None):
 
 def run_inference(model, torch_input, model_category_const):
     with torch.no_grad():
-        semantic_logits, center_heatmap, offset_map, _ = model(torch_input)
+        semantic_logits, center_heatmap, offset_map = model(torch_input)
 
     if model_category_const == DEEPLAB_V3_PLUS:
         return semantic_logits
