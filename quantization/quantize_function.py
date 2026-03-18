@@ -60,7 +60,7 @@ def create_quant_sim(
     model.eval()
 
     sim = QuantizationSimModel(
-        model=model,
+        model=wrapped_model,
         dummy_input=dummy_input,
         quant_scheme=quant_scheme,
         default_output_bw=default_output_bw,
