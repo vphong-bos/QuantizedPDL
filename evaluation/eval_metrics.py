@@ -79,8 +79,8 @@ def evaluate_model(model, model_category_const, loader, device, max_samples=-1):
             orig_h, orig_w = sample["orig_size"]
 
             logits = get_semantic_logits(model, image, model_category_const)
-            print("logits shape:", logits.shape)
-            print("logits min/max:", logits.min().item(), logits.max().item())
+            # print("logits shape:", logits.shape)
+            # print("logits min/max:", logits.min().item(), logits.max().item())
 
             logits = F.interpolate(
                 logits,
@@ -90,8 +90,8 @@ def evaluate_model(model, model_category_const, loader, device, max_samples=-1):
             )
 
             pred = logits.argmax(dim=1).squeeze(0)
-            print("pred unique:", torch.unique(pred))
-            print("label unique:", torch.unique(label))
+            # print("pred unique:", torch.unique(pred))
+            # print("label unique:", torch.unique(label))
             conf_mat = update_confusion_matrix(conf_mat, pred, label)
 
             processed += 1

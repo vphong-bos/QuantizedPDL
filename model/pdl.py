@@ -174,7 +174,7 @@ class PytorchPanopticDeepLab(nn.Module):
                 for old_prefix, new_prefix in key_mappings.items():
                     if key.startswith(old_prefix):
                         mapped_key = key.replace(old_prefix, new_prefix, 1)
-                        logger.debug(f"Remapped key: {key} -> {mapped_key}")
+                        # logger.debug(f"Remapped key: {key} -> {mapped_key}")
                         break
 
                 # Convert NumPy arrays to PyTorch tensors
