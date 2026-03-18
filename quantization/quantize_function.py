@@ -143,7 +143,7 @@ def load_aimet_quantized_model(
             device=device,
         )
 
-        model.load_state_dict(torch.load(quant_weights, map_location="cpu"))
+        model.load_state_dict(torch.load(quant_weights, map_location="cpu", weights_only=False))
         model.eval()
 
         sim, _ = create_quant_sim(
