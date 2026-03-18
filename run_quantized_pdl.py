@@ -55,7 +55,7 @@ def parse_args(argv=None):
         "--save_quant_checkpoint",
         type=str,
         default=None,
-        help="optional path to save quantized PyTorch state_dict",
+        help="optional path to save AIMET sim checkpoint",
     )
 
     parser.add_argument("--export_path", type=str, default=DEFAULT_EXPORT_PATH, help="path to export quantized model")
@@ -69,7 +69,6 @@ def parse_args(argv=None):
         help="Config for quantize model",
     )
 
-    # CLE on/off
     parser.add_argument(
         "--enable_cle",
         dest="enable_cle",
@@ -116,6 +115,7 @@ def parse_args(argv=None):
 
     return parser.parse_args(argv)
 
+
 def adaround_forward_fn(model, inputs):
     if isinstance(inputs, (list, tuple)):
         images = inputs[0]
@@ -147,23 +147,23 @@ def main(args):
         image_width=args.image_width,
         device=args.device,
     )
-    wrapped_model = AimetTraceWrapper(model=model, model_category_const=model_category_const).to(args.device).eval()
+    model = model.to(args.device).eval()
 
     if args.enable_cle:
         print("Applying Cross-Layer Equalization (CLE)...")
         from aimet_torch.cross_layer_equalization import equalize_model
 
         cle_start = time.time()
-
-        model.cpu().eval()
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
+
+        model = model.cpu().eval()
         equalize_model(
-            wrapped_model,
+            model,
             input_shapes=(1, 3, args.image_height, args.image_width),
             dummy_input=dummy_input_cpu,
         )
 
-        wrapped_model.to(args.device).eval()
+        model = model.to(args.device).eval()
         cle_time = time.time() - cle_start
         print(f"CLE finished in {cle_time:.2f} s")
     else:
@@ -187,7 +187,6 @@ def main(args):
 
     if args.enable_adaround:
         print("Applying AdaRound...")
-        wrapped_model.cpu().eval()
         dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
         adaround_params = AdaroundParameters(
@@ -197,8 +196,9 @@ def main(args):
             forward_fn=adaround_forward_fn,
         )
 
-        wrapped_model = Adaround.apply_adaround(
-            model=wrapped_model,
+        model = model.cpu().eval()
+        model = Adaround.apply_adaround(
+            model=model,
             dummy_input=dummy_input_cpu,
             params=adaround_params,
             path=args.adaround_path,
@@ -208,13 +208,19 @@ def main(args):
             default_config_file=args.config_file,
         )
 
-        wrapped_model.to(args.device).eval()
+        model = model.to(args.device).eval()
         print(
             f"AdaRound finished. Encodings saved under: "
             f"{os.path.join(args.adaround_path, args.adaround_prefix)}*.encodings"
         )
     else:
         print("AdaRound disabled")
+
+    print("Wrapping model for AIMET tracing...")
+    wrapped_model = AimetTraceWrapper(
+        model=model,
+        model_category_const=model_category_const,
+    ).to(args.device).eval()
 
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
@@ -258,6 +264,7 @@ def main(args):
         print(f"Exported files to: {args.export_path}")
 
     print("Done.")
+
 
 if __name__ == "__main__":
     args = parse_args()
