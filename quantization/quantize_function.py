@@ -124,8 +124,59 @@ def quantize_model_with_aimet(
 
 import os
 import json
+import math
 import torch
 from aimet_torch.quantsim import QuantizationSimModel
+
+def _num_expected_encodings_from_quantizer(quantizer):
+    """
+    Return how many legacy encodings this quantizer expects.
+    For scalar/per-tensor quantizers, expect 1.
+    For per-channel quantizers, expect product(shape).
+    """
+    shape = getattr(quantizer, "shape", None)
+
+    if shape is None:
+        return 1
+
+    try:
+        # torch.Size([]) -> scalar quantizer -> expect 1
+        if len(shape) == 0:
+            return 1
+
+        n = 1
+        for x in shape:
+            n *= int(x)
+        return max(n, 1)
+    except Exception:
+        return 1
+
+
+def _build_param_encoding_expectation_map(sim_model):
+    """
+    Build mapping:
+        full_param_name -> expected_number_of_legacy_encoding_entries
+    Example:
+        'model.backbone.stem.conv1.norm.weight' -> 1
+        'model.some_conv.weight' -> 64
+    """
+    expected = {}
+
+    for module_name, module in sim_model.named_modules():
+        param_quantizers = getattr(module, "param_quantizers", None)
+        if not param_quantizers:
+            continue
+
+        # AIMET commonly exposes this as a dict-like mapping
+        for param_name, quantizer in param_quantizers.items():
+            if quantizer is None:
+                continue
+
+            full_name = f"{module_name}.{param_name}" if module_name else param_name
+            expected[full_name] = _num_expected_encodings_from_quantizer(quantizer)
+
+    return expected
+
 
 def load_aimet_quantized_model(
     quant_weights,
@@ -200,9 +251,6 @@ def load_aimet_quantized_model(
     target_state = sim.model.state_dict()
     target_keys = set(target_state.keys())
 
-    print("[load] sample checkpoint keys:", list(state_dict.keys())[:10])
-    print("[load] sample target keys:", list(target_keys)[:10])
-
     fixed_sd = {}
     dropped_ckpt_keys = []
 
@@ -212,7 +260,6 @@ def load_aimet_quantized_model(
         if nk.startswith("module."):
             nk = nk[len("module."):]
 
-        # Avoid double-prefixing
         if nk.startswith("wrapped_model."):
             nk = nk[len("wrapped_model."):]
 
@@ -237,7 +284,7 @@ def load_aimet_quantized_model(
         print("[load] first unexpected keys:", unexpected[:10])
 
     # ------------------------------------------------------------
-    # Filter encoding JSON to only entries that exist in current model
+    # Load and filter encoding JSON
     # ------------------------------------------------------------
     with open(encoding_path, "r") as f:
         enc = json.load(f)
@@ -249,11 +296,14 @@ def load_aimet_quantized_model(
 
     valid_param_names = set(sim.model.state_dict().keys())
     valid_module_names = {name for name, _ in sim.model.named_modules()}
+    expected_param_encoding_counts = _build_param_encoding_expectation_map(sim.model)
 
     removed_param_encodings = []
     removed_activation_encodings = []
 
-    # Filter parameter encodings
+    # Filter parameter encodings by:
+    #   1) name exists
+    #   2) number of encoding entries matches quantizer expectation
     if "param_encodings" in enc:
         if not isinstance(enc["param_encodings"], dict):
             raise ValueError(
@@ -261,11 +311,27 @@ def load_aimet_quantized_model(
             )
 
         filtered_param_encodings = {}
+
         for k, v in enc["param_encodings"].items():
-            if k in valid_param_names:
-                filtered_param_encodings[k] = v
+            if k not in valid_param_names:
+                removed_param_encodings.append((k, "missing_param"))
+                continue
+
+            expected_count = expected_param_encoding_counts.get(k, 1)
+
+            # Legacy encodings are usually a list of dicts
+            if isinstance(v, list):
+                actual_count = len(v)
             else:
-                removed_param_encodings.append(k)
+                actual_count = 1
+
+            if actual_count != expected_count:
+                removed_param_encodings.append(
+                    (k, f"count_mismatch expected={expected_count} actual={actual_count}")
+                )
+                continue
+
+            filtered_param_encodings[k] = v
 
         print(
             f"[load] param encodings kept: {len(filtered_param_encodings)} / {len(enc['param_encodings'])}"
@@ -275,7 +341,7 @@ def load_aimet_quantized_model(
 
         enc["param_encodings"] = filtered_param_encodings
 
-    # Filter activation encodings
+    # Filter activation encodings only by name for now
     if "activation_encodings" in enc:
         if not isinstance(enc["activation_encodings"], dict):
             raise ValueError(
