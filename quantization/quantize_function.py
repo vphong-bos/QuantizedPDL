@@ -381,9 +381,14 @@ def load_aimet_quantized_model(
     # ------------------------------------------------------------
     # Load filtered encodings
     # ------------------------------------------------------------
-    sim.set_and_freeze_param_encodings(filtered_encoding_path)
-    sim.set_and_freeze_activation_encodings(filtered_encoding_path)
-    print(f"[load] Loaded encodings from: {filtered_encoding_path}")
+    # Load encodings according to AIMET version
+    if hasattr(sim, "set_and_freeze_activation_encodings"):
+        sim.set_and_freeze_param_encodings(filtered_encoding_path)
+        sim.set_and_freeze_activation_encodings(filtered_encoding_path)
+    else:
+        # Older / different AIMET versions only expose load_encodings()
+        sim.load_encodings(filtered_encoding_path)
 
+    print(f"[load] Loaded encodings from: {filtered_encoding_path}")
     sim.model.eval()
     return sim.model, model_category_const
