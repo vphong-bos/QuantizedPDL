@@ -15,6 +15,9 @@
   "params": {},
   "op_type": {},
   "supergroups": [],
+  "model_input": {
+    "is_input_quantized": "True"
+  },
   "model_output": {
     "is_output_quantized": "True"
   }
