@@ -123,8 +123,8 @@ def quantize_model_with_aimet(
 
     return sim
 
-def load_aimet_quantized_model(quant_checkpoint, model_category, device):
-    sim = quantsim.load_checkpoint(quant_checkpoint)
+def load_aimet_quantized_model(quant_weights, model_category, device):
+    sim = quantsim.load_checkpoint(quant_weights)
     sim.model.to(device).eval()
 
     model_category_const = (
