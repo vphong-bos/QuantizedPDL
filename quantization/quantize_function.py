@@ -106,7 +106,7 @@ def quantize_model_with_aimet(
 
     sim, _ = create_quant_sim(
         model=model,
-        model_category_const=model_category_const,
+        # model_category_const=model_category_const,
         device=device,
         image_height=image_height,
         image_width=image_width,
@@ -185,7 +185,7 @@ def load_aimet_quantized_model(
 
     sim, _ = create_quant_sim(
         model=model,
-        model_category_const=model_category_const,
+        # model_category_const=model_category_const,
         device=device,
         image_height=image_height,
         image_width=image_width,
