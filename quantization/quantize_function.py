@@ -200,6 +200,7 @@ def load_aimet_quantized_model(
 
     loaded_obj = torch.load(quant_weights, map_location=device, weights_only=False)
 
+    # Extract state_dict once
     # ------------------------------------------------------------
     # Normalize loaded artifact into a state_dict
     # ------------------------------------------------------------
@@ -219,6 +220,10 @@ def load_aimet_quantized_model(
     else:
         raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
 
+    if not isinstance(state_dict, dict):
+        raise ValueError(f"Loaded state_dict is not a dict: {type(state_dict)}")
+
+    # Recreate model + sim
     if not isinstance(state_dict, dict):
         raise ValueError(f"Loaded state_dict is not a dict: {type(state_dict)}")
 
@@ -245,6 +250,7 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
+    # Fix keys to match sim.model
     # ------------------------------------------------------------
     # Normalize checkpoint keys to match sim.model
     # ------------------------------------------------------------
@@ -283,6 +289,9 @@ def load_aimet_quantized_model(
     if unexpected:
         print("[load] first unexpected keys:", unexpected[:10])
 
+    sim.set_and_freeze_param_encodings(encoding_path)
+    sim.set_and_freeze_activation_encodings(encoding_path)
+    print(f"[load] Loaded encodings from: {encoding_path}")
     # ------------------------------------------------------------
     # Load and filter encoding JSON
     # ------------------------------------------------------------
