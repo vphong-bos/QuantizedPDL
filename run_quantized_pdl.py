@@ -9,14 +9,7 @@ from model.pdl import build_model
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
 from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
-
-# from aimet_torch.cross_layer_equalization import equalize_model
-# from aimet_torch.auto_quant import AutoQuant
-
 from utils.image_loader import load_images
-
-# from evaluation.eval_dataset import build_eval_loader
-# from evaluation.eval_metrics import evaluate_model
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
@@ -66,15 +59,28 @@ def parse_args(argv=None):
     parser.add_argument("--export_prefix", type=str, default="panoptic_deeplab_int8", help="export filename prefix")
     parser.add_argument("--no_export", action="store_true", help="skip AIMET export step")
 
-    # AutoQuant-specific
-    parser.add_argument("--allowed_accuracy_drop", type=float, default=0.5,
-                        help="allowed accuracy drop for AutoQuant")
-    parser.add_argument("--results_dir", type=str, default=None,
-                        help="AutoQuant results dir; defaults to export_path/autoquant_results")
-    # parser.add_argument("--cityscapes_root", type=str, required=True,
-    #                     help="Cityscapes root containing leftImg8bit/val and gtFine/val")
-    parser.add_argument("--config_file", type=str, default=None,
-                        help="Config for quantize model")
+    parser.add_argument(
+        "--config_file",
+        type=str,
+        default=None,
+        help="Config for quantize model",
+    )
+
+    # CLE on/off
+    parser.add_argument(
+        "--enable_cle",
+        dest="enable_cle",
+        action="store_true",
+        help="enable Cross-Layer Equalization before quantization",
+    )
+    parser.add_argument(
+        "--disable_cle",
+        dest="enable_cle",
+        action="store_false",
+        help="disable Cross-Layer Equalization",
+    )
+    parser.set_defaults(enable_cle=False)
+
     return parser.parse_args(argv)
 
 
@@ -89,11 +95,6 @@ def main(args):
 
     os.makedirs(args.export_path, exist_ok=True)
 
-    results_dir = args.results_dir
-    if results_dir is None:
-        results_dir = os.path.join(args.export_path, "autoquant_results")
-    os.makedirs(results_dir, exist_ok=True)
-
     print("Loading FP32 model...")
     model, model_category_const = build_model(
         weights_path=args.weights_path,
@@ -102,27 +103,23 @@ def main(args):
         image_width=args.image_width,
         device=args.device,
     )
+    model.eval()
 
-    # print("Applying Cross-Layer Equalization...")
-    wrapped_model = AimetTraceWrapper(model, model_category_const).eval()
+    if args.enable_cle:
+        print("Applying Cross-Layer Equalization (CLE)...")
+        from aimet_torch.cross_layer_equalization import equalize_model
 
-    # from aimet_torch.model_preparer import prepare_model
-    # from aimet_torch.model_validator.model_validator import ModelValidator
-    # model.eval()
-    # wrapped_model = AimetTraceWrapper(model, model_category_const).to(args.device).eval()
-    # dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
+        cle_start = time.time()
 
-    # print("=== Running AIMET ModelValidator on original wrapped model ===")
-    # is_valid = ModelValidator.validate_model(wrapped_model, model_input=dummy_input)
-    # print("Model valid:", is_valid)
+        model.cpu().eval()
+        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
+        equalize_model(model, dummy_input_cpu)
 
-    # print("=== Running AIMET prepare_model manually ===")
-    # prepared = prepare_model(wrapped_model)
-    # prepared.eval()
-
-    # print("=== Running AIMET ModelValidator on prepared model ===")
-    # is_valid_prepared = ModelValidator.validate_model(prepared, model_input=dummy_input)
-    # print("Prepared model valid:", is_valid_prepared)
+        model.to(args.device).eval()
+        cle_time = time.time() - cle_start
+        print(f"CLE finished in {cle_time:.2f} s")
+    else:
+        print("CLE disabled")
 
     print("Collecting calibration images...")
     all_calib_images = load_images(args.calib_images, num_iters=-1, recursive=True)
@@ -150,7 +147,7 @@ def main(args):
         quant_scheme=args.quant_scheme,
         default_output_bw=args.default_output_bw,
         default_param_bw=args.default_param_bw,
-        config_file=args.config_file
+        config_file=args.config_file,
     )
 
     print("Computing encodings with calibration data...")
@@ -184,72 +181,8 @@ def main(args):
         )
         print(f"Exported files to: {args.export_path}")
 
-    # print("Building validation loader...")
-    # eval_loader = build_eval_loader(
-    #     cityscapes_root=args.cityscapes_root,
-    #     image_width=args.image_width,
-    #     image_height=args.image_height,
-    #     batch_size=1,
-    #     num_workers=args.num_workers,
-    # )
+    print("Done.")
 
-    # print("Creating AutoQuant...")
-    # dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device=args.device)
-
-    # def eval_callback(candidate_model, num_samples=None):
-    #     candidate_model.eval()
-    #     results = evaluate_model(
-    #         model=candidate_model,
-    #         model_category_const=model_category_const,
-    #         loader=eval_loader,
-    #         device=args.device,
-    #         max_samples=-1 if num_samples is None else num_samples,
-    #     )
-    #     return results["mIoU"]
-
-    # auto_quant = AutoQuant(
-    #     model=wrapped_model,
-    #     dummy_input=dummy_input,
-    #     data_loader=calib_loader,
-    #     eval_callback=eval_callback,
-    #     param_bw=args.default_param_bw,
-    #     output_bw=args.default_output_bw,
-    #     quant_scheme=args.quant_scheme,
-    #     results_dir=results_dir,
-    #     strict_validation=False,
-    # )
-
-    # print("Running AutoQuant...")
-    # aq_start = time.time()
-    # best_model, best_score, encoding_path = auto_quant.optimize(
-    #     allowed_accuracy_drop=args.allowed_accuracy_drop
-    # )
-    # aq_time = time.time() - aq_start
-    # print(f"AutoQuant finished in {aq_time:.2f} s")
-
-    # if best_model is None:
-    #     print("AutoQuant did not return a best_model. Falling back to W32A8 sim.")
-    #     sim, w32a8_score = auto_quant.run_inference()
-    #     print(f"W32A8 score: {w32a8_score}")
-    #     quantized_model = sim.model
-    #     encoding_path = None
-    # else:
-    #     quantized_model = best_model
-
-    # quantized_model.eval()
-
-    # if args.save_quant_checkpoint is not None:
-    #     torch.save(
-    #         {
-    #             "state_dict": quantized_model.state_dict(),
-    #             "encoding_path": encoding_path,
-    #             "best_score": best_score,
-    #         },
-    #         args.save_quant_checkpoint,
-    #     )
-    #     print(f"Saved quantized checkpoint to: {args.save_quant_checkpoint}")
-
-    # print("Done.")
 
 if __name__ == "__main__":
     args = parse_args()
