@@ -535,7 +535,7 @@ def main(args):
         )
 
         os.makedirs(args.export_path, exist_ok=True)
-        onnx_path = os.path.join(args.export_path, f"{args.export_prefix_operation_orient}.onnx")
+        onnx_path = os.path.join(args.export_path, f"{args.export_prefix}_operation_orient.onnx")
 
         onnx.export(
             sim.model,                 
