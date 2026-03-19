@@ -480,7 +480,7 @@ def main(args):
         quant_scheme=args.quant_scheme,
         default_output_bw=args.default_output_bw,
         default_param_bw=args.default_param_bw,
-        config_file=args.config_file
+        config_file=args.config_file,
         skip_layer_names=skip_layer_names
     )
 
