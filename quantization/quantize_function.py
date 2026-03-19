@@ -122,16 +122,13 @@ def quantize_model_with_aimet(
 
     return sim
 
+import onnxruntime as ort
+
 def load_aimet_quantized_model(
     quant_weights,
-    encoding_path,
     model_category,
-    image_height,
-    image_width,
     device,
-    quant_scheme="tf_enhanced",
-    default_output_bw=8,
-    default_param_bw=8,
+    provider="CPUExecutionProvider",
 ):
     print("Loading quantized model...")
 
@@ -139,63 +136,51 @@ def load_aimet_quantized_model(
         PANOPTIC_DEEPLAB if model_category == "PANOPTIC_DEEPLAB" else DEEPLAB_V3_PLUS
     )
 
-    # Case 1: load full AIMET sim checkpoint
-    if not encoding_path:
-        sim = quantsim.load_checkpoint(quant_weights)
-        sim.model.to(device).eval()
-        return sim.model, model_category_const
+    ext = os.path.splitext(quant_weights)[1].lower()
 
-    # Case 2: rebuild sim from model weights + encodings
-    model, _ = build_model(
-        weights_path=None,
-        model_category=model_category,
-        image_height=image_height,
-        image_width=image_width,
-        device=device,
-    )
-    model.eval()
+    # =========================
+    # Case 1: ONNX QDQ model
+    # =========================
+    if ext == ".onnx":
+        print("Detected ONNX model")
 
-    loaded_obj = torch.load(quant_weights, map_location="cpu", weights_only=False)
+        so = ort.SessionOptions()
+        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
 
-    # Normalize checkpoint into state_dict
-    if isinstance(loaded_obj, dict):
-        if "state_dict" in loaded_obj:
-            state_dict = loaded_obj["state_dict"]
-        elif "model_state_dict" in loaded_obj:
-            state_dict = loaded_obj["model_state_dict"]
-        elif "model" in loaded_obj and hasattr(loaded_obj["model"], "state_dict"):
-            state_dict = loaded_obj["model"].state_dict()
-        else:
-            state_dict = loaded_obj
-    elif hasattr(loaded_obj, "state_dict"):
-        state_dict = loaded_obj.state_dict()
-    else:
-        raise ValueError(f"Unsupported quant_weights object type: {type(loaded_obj)}")
+        session = ort.InferenceSession(
+            quant_weights,
+            sess_options=so,
+            providers=[provider],
+        )
 
-    if not isinstance(state_dict, dict):
-        raise ValueError(f"Expected dict-like state_dict, got {type(state_dict)}")
+        input_name = session.get_inputs()[0].name
+        output_names = [o.name for o in session.get_outputs()]
 
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
-    print(f"[load] missing keys: {len(missing)}")
-    print(f"[load] unexpected keys: {len(unexpected)}")
-    if missing:
-        print("[load] first missing keys:", missing[:10])
-    if unexpected:
-        print("[load] first unexpected keys:", unexpected[:10])
+        print(f"[ONNX] input: {input_name}")
+        print(f"[ONNX] outputs: {output_names}")
 
-    sim, _ = create_quant_sim(
-        model=model,
-        model_category_const=model_category_const,
-        device=device,
-        image_height=image_height,
-        image_width=image_width,
-        quant_scheme=quant_scheme,
-        default_output_bw=default_output_bw,
-        default_param_bw=default_param_bw,
-    )
+        return {
+            "backend": "onnx",
+            "session": session,
+            "input_name": input_name,
+            "output_names": output_names,
+            "model": None,
+            "model_category_const": model_category_const,
+        }
 
-    # sim.set_and_freeze_param_encodings(encoding_path=encoding_path)
-    sim.load_encodings(encoding_path)
+    # =========================
+    # Case 2: AIMET checkpoint
+    # =========================
+    print("Detected AIMET checkpoint")
+
+    sim = quantsim.load_checkpoint(quant_weights)
     sim.model.to(device).eval()
 
-    return sim.model, model_category_const
+    return {
+        "backend": "torch",
+        "model": sim.model,
+        "session": None,
+        "input_name": None,
+        "output_names": None,
+        "model_category_const": model_category_const,
+    }

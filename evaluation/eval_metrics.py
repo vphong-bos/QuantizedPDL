@@ -20,21 +20,39 @@ from model.pdl import (
 
 from evaluation.eval_dataset import EvalDataset, eval_collate, build_eval_loader
 
+def get_semantic_logits(model_obj, x, model_category_const):
+    backend = model_obj["backend"]
 
-def get_semantic_logits(model, x, model_category_const):
-    with torch.no_grad():
-        outputs = model(x)
+    if backend == "torch":
+        model = model_obj["model"]
+        with torch.no_grad():
+            outputs = model(x)
 
-    if model_category_const == DEEPLAB_V3_PLUS:
+        if model_category_const == DEEPLAB_V3_PLUS:
+            if isinstance(outputs, (tuple, list)):
+                return outputs[0]
+            return outputs
+
+        # PANOPTIC_DEEPLAB
         if isinstance(outputs, (tuple, list)):
             return outputs[0]
-        return outputs
 
-    # PANOPTIC_DEEPLAB
-    if isinstance(outputs, (tuple, list)):
-        return outputs[0]
+        raise TypeError(f"Unexpected model output type: {type(outputs)}")
 
-    raise TypeError(f"Unexpected model output type: {type(outputs)}")
+    elif backend == "onnx":
+        session = model_obj["session"]
+        input_name = model_obj["input_name"]
+
+        x_np = x.detach().cpu().numpy().astype(np.float32)
+        outputs = session.run(None, {input_name: x_np})
+
+        # Keep same assumption as torch path: semantic logits are first output
+        logits = outputs[0]
+
+        return torch.from_numpy(logits).to(device=x.device)
+
+    else:
+        raise ValueError(f"Unsupported backend: {backend}")
 
 
 def update_confusion_matrix(conf_mat, pred, target, num_classes=19, ignore_index=255):
@@ -67,8 +85,10 @@ def compute_miou_from_confmat(conf_mat):
     }
 
 
-def evaluate_model(model, model_category_const, loader, device, max_samples=-1):
-    model.eval()
+def evaluate_model(model_obj, model_category_const, loader, device, max_samples=-1):
+    if model_obj["backend"] == "torch":
+        model_obj["model"].eval()
+
     conf_mat = torch.zeros((19, 19), dtype=torch.int64, device=device)
 
     processed = 0
@@ -78,9 +98,7 @@ def evaluate_model(model, model_category_const, loader, device, max_samples=-1):
             label = sample["label"].to(device=device)
             orig_h, orig_w = sample["orig_size"]
 
-            logits = get_semantic_logits(model, image, model_category_const)
-            # print("logits shape:", logits.shape)
-            # print("logits min/max:", logits.min().item(), logits.max().item())
+            logits = get_semantic_logits(model_obj, image, model_category_const)
 
             logits = F.interpolate(
                 logits,
@@ -90,8 +108,6 @@ def evaluate_model(model, model_category_const, loader, device, max_samples=-1):
             )
 
             pred = logits.argmax(dim=1).squeeze(0)
-            # print("pred unique:", torch.unique(pred))
-            # print("label unique:", torch.unique(label))
             conf_mat = update_confusion_matrix(conf_mat, pred, label)
 
             processed += 1

@@ -23,8 +23,7 @@ def parse_args():
     parser.add_argument("--fp32_weights", type=str, required=True,
                         help="Path to FP32 .pkl weights")
     parser.add_argument("--quant_weights", type=str, required=True,
-                        help="Path to quantized .pt/.pth model weight checkpoint")
-    parser.add_argument("--encoding_path", type=str, help="Path to saved encoding path")
+                        help="Path to quantized model: AIMET checkpoint (.pt/.pth/.pkl) or ONNX (.onnx)")
 
     parser.add_argument("--model_category", type=str, default="PANOPTIC_DEEPLAB",
                         choices=["DEEPLAB_V3_PLUS", "PANOPTIC_DEEPLAB"])
@@ -37,8 +36,13 @@ def parse_args():
                         help="Use only first N val images, -1 for full val")
     parser.add_argument("--split", type=str, default="val",
                         choices=["test", "val"])
+
     parser.add_argument("--default_output_bw", type=int, default=8, help="activation bitwidth")
     parser.add_argument("--default_param_bw", type=int, default=8, help="parameter bitwidth")
+
+    parser.add_argument("--onnx_provider", type=str, default="CPUExecutionProvider",
+                        choices=["CPUExecutionProvider", "CUDAExecutionProvider"],
+                        help="ONNX Runtime execution provider when quant_weights is .onnx")
 
     return parser.parse_args()
 
@@ -65,7 +69,13 @@ def main():
 
     print("Evaluating FP32...")
     fp32_results = evaluate_model(
-        model=fp32_model,
+        model_obj={
+            "backend": "torch",
+            "model": fp32_model,
+            "session": None,
+            "input_name": None,
+            "output_names": None,
+        },
         model_category_const=fp32_category,
         loader=loader,
         device=args.device,
@@ -73,41 +83,41 @@ def main():
     )
 
     print("Loading quantized model...")
-    quant_model, quant_category = load_aimet_quantized_model(
+    quant_obj = load_aimet_quantized_model(
         quant_weights=args.quant_weights,
-        encoding_path=args.encoding_path,
         model_category=args.model_category,
-        image_height=args.image_height,
-        image_width=args.image_width,
         device=args.device,
-        quant_scheme="tf_enhanced",
-        default_output_bw=8,
-        default_param_bw=8
+        provider=args.onnx_provider,
     )
 
     print("Evaluating quantized...")
     quant_results = evaluate_model(
-        model=quant_model,
-        model_category_const=quant_category,
+        model_obj=quant_obj,
+        model_category_const=quant_obj["model_category_const"],
         loader=loader,
         device=args.device,
         max_samples=args.max_samples,
     )
 
     print("Evaluating PCC between FP32 and quantized outputs...")
-    pcc_results = evaluate_pcc(
-        fp32_model=fp32_model,
-        quant_model=quant_model,
-        loader=loader,
-        device=args.device,
-        max_samples=args.max_samples,
-    )
+    if quant_obj["backend"] == "torch":
+        pcc_results = evaluate_pcc(
+            fp32_model=fp32_model,
+            quant_model=quant_obj["model"],
+            loader=loader,
+            device=args.device,
+            max_samples=args.max_samples,
+        )
+        pcc_value = pcc_results["PCC"]
+    else:
+        print("Skipping PCC: current evaluate_pcc expects a torch model, but quant model is ONNX Runtime.")
+        pcc_value = float("nan")
 
     print("\n================ Compare FP32 vs Quantized ================")
     print(f"FP32  mIoU: {fp32_results['mIoU']:.4f}")
     print(f"INT8  mIoU: {quant_results['mIoU']:.4f}")
     print(f"Drop      : {quant_results['mIoU'] - fp32_results['mIoU']:.4f}")
-    print(f"PCC       : {pcc_results['PCC']:.6f}")
+    print(f"PCC       : {pcc_value:.6f}")
     print("===========================================================")
 
 if __name__ == "__main__":
