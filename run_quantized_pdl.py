@@ -460,14 +460,6 @@ def main(args):
 
         # print(f"QuantAnalyzer results saved to: {args.quant_analyzer_dir}")
 
-    layers_to_exclude = {
-        "model.backbone.stem.conv1",
-        "model.backbone.stem.conv1.norm",
-        "model.backbone.stem.conv2",
-        "model.backbone.stem.conv2.norm",
-        "model.backbone.stem.conv3",
-    }
-
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
         model=wrapped_model,
@@ -478,8 +470,7 @@ def main(args):
         quant_scheme=args.quant_scheme,
         default_output_bw=args.default_output_bw,
         default_param_bw=args.default_param_bw,
-        config_file=args.config_file,
-        layers_to_exclude=layers_to_exclude
+        config_file=args.config_file
     )
 
     print("Computing encodings with calibration data...")

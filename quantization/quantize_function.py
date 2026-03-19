@@ -52,7 +52,6 @@ def create_quant_sim(
     default_output_bw,
     default_param_bw,
     config_file = None,
-    layers_to_exclude = None
 ):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
@@ -67,6 +66,14 @@ def create_quant_sim(
         default_param_bw=default_param_bw,
         config_file = config_file,
     )
+    
+    layers_to_exclude = [
+        sim.model.backbone.stem.conv1,
+        sim.model.backbone.stem.conv1.norm,
+        sim.model.backbone.stem.conv2,
+        sim.model.backbone.stem.conv2.norm,
+        sim.model.backbone.stem.conv3,
+    ]
 
     sim.exclude_layers_from_quantization(layers_to_exclude)
 
