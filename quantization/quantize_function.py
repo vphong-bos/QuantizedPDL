@@ -66,19 +66,40 @@ def create_quant_sim(
         default_param_bw=default_param_bw,
         config_file = config_file,
     )
-    
-    layers_to_exclude = [
-        sim.model.backbone.stem.conv1,
-        sim.model.backbone.stem.conv1.norm,
-        sim.model.backbone.stem.conv2,
-        sim.model.backbone.stem.conv2.norm,
-        sim.model.backbone.stem.conv3,
+
+    skip_layer_names = [
+        "model.backbone.stem.conv1",
+        "model.backbone.stem.conv1.norm",
+        "model.backbone.stem.conv2",
+        "model.backbone.stem.conv2.norm",
+        "model.backbone.stem.conv3",
     ]
 
-    sim.exclude_layers_from_quantization(layers_to_exclude)
+    name_to_module = dict(sim.model.named_modules())
+
+    # Debug: print possible matches around "stem"
+    for name in name_to_module:
+        if "stem" in name or "backbone" in name:
+            print(name)
+
+    layers_to_exclude = []
+    missing = []
+
+    for name in skip_layer_names:
+        if name in name_to_module:
+            layers_to_exclude.append(name_to_module[name])
+        else:
+            missing.append(name)
+
+    if missing:
+        print("Missing layer names:")
+        for name in missing:
+            print("  ", name)
+
+    if layers_to_exclude:
+        sim.exclude_layers_from_quantization(layers_to_exclude)
 
     return sim, dummy_input
-
 
 def calibration_forward_pass(model, forward_pass_args):
     dataloader, device = forward_pass_args
