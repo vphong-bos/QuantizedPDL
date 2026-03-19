@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import os
+import copy
 import time
 
 import torch
@@ -9,7 +10,7 @@ from model.pdl import build_model
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
 from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
-from quantization.bias_correction import apply_bias_correction
+from quantization.bias_correction import apply_bias_correction, copy_biases
 from utils.image_loader import load_images
 
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
@@ -21,7 +22,6 @@ from aimet_torch import quantsim
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
 DEFAULT_EXPORT_PATH = os.path.join(pdl_home_path, "quantized_export")
-
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser()
@@ -246,8 +246,10 @@ def main(args):
         print("Applying Bias Correction...")
         bc_start = time.time()
 
-        wrapped_model = apply_bias_correction(
-            model=wrapped_model,
+        bc_model = copy.deepcopy(wrapped_model).cpu().eval()
+
+        bc_model = apply_bias_correction(
+            model=bc_model,
             calib_loader=calib_loader,
             image_height=args.image_height,
             image_width=args.image_width,
@@ -257,8 +259,12 @@ def main(args):
             config_file=args.config_file,
             bias_corr_num_quant_samples=args.bias_corr_num_quant_samples,
             bias_corr_num_bias_samples=args.bias_corr_num_bias_samples,
-            bias_corr_empirical_only = args.bias_corr_empirical_only,
+            bias_corr_empirical_only=args.bias_corr_empirical_only,
         )
+
+        copy_biases(bc_model, wrapped_model)
+
+        del bc_model
 
         bc_time = time.time() - bc_start
         print(f"Bias Correction finished in {bc_time:.2f} s")

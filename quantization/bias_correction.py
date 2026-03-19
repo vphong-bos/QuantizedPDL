@@ -1,6 +1,32 @@
 from aimet_torch import quantsim, bias_correction
 from torch.utils.data import Dataset, DataLoader
 
+def copy_biases(src_model, dst_model):
+    src_modules = dict(src_model.named_modules())
+    dst_modules = dict(dst_model.named_modules())
+
+    copied = 0
+    for name, src_module in src_modules.items():
+        if name not in dst_modules:
+            continue
+
+        dst_module = dst_modules[name]
+
+        src_bias = getattr(src_module, "bias", None)
+        dst_bias = getattr(dst_module, "bias", None)
+
+        # Handle AIMET wrapped modules if needed
+        if src_bias is None and hasattr(src_module, "_module_to_wrap"):
+            src_bias = getattr(src_module._module_to_wrap, "bias", None)
+        if dst_bias is None and hasattr(dst_module, "_module_to_wrap"):
+            dst_bias = getattr(dst_module._module_to_wrap, "bias", None)
+
+        if src_bias is not None and dst_bias is not None:
+            dst_bias.data.copy_(src_bias.data)
+            copied += 1
+
+    print(f"Copied corrected biases for {copied} layers")
+
 class BiasCorrectionDatasetWrapper(Dataset):
     def __init__(self, base_dataset):
         self.base_dataset = base_dataset
