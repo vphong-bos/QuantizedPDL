@@ -206,11 +206,11 @@ def main(args):
     wrapped_model = AimetTraceWrapper(
         model=model,
         model_category_const=model_category_const,
-    ).to(args.device).eval()
+    ).cpu().eval()
 
     if args.enable_bn_fold:
         print("Applying batch norm folding...")
-        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width)
+        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
         fold_all_batch_norms(
             model=wrapped_model,
@@ -218,6 +218,7 @@ def main(args):
             dummy_input=dummy_input_cpu,
         )
 
+    wrapped_model = wrapped_model.to(args.device).eval()
 
     if args.enable_adaround:
         print("Applying AdaRound...")
