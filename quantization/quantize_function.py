@@ -194,8 +194,8 @@ def load_aimet_quantized_model(
         default_param_bw=default_param_bw,
     )
 
-    sim.set_and_freeze_param_encodings(encoding_path=encoding_path)
-    # sim.load_encodings(encoding_path)
+    # sim.set_and_freeze_param_encodings(encoding_path=encoding_path)
+    sim.load_encodings(encoding_path)
     sim.model.to(device).eval()
 
     return sim.model, model_category_const
