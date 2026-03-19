@@ -12,45 +12,7 @@ from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, 
 from utils.image_loader import load_images
 
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
-from aimet_torch.model_preparer import prepare_model
 from aimet_torch import quantsim
-
-import torch
-import copy
-from aimet_torch.model_preparer import prepare_model
-
-class QuantAdapter(torch.nn.Module):
-    def __init__(self, base_model, model_category_const=None):
-        super().__init__()
-        self.base_model = base_model
-        self.model_category_const = model_category_const
-
-    def forward(self, x):
-        out = self.base_model(x)
-
-        # adapt this to your real output structure
-        if isinstance(out, dict):
-            if "semantic" in out:
-                return out["semantic"]
-            if "out" in out:
-                return out["out"]
-
-            # fallback: first tensor-like value
-            for v in out.values():
-                if torch.is_tensor(v):
-                    return v
-            raise RuntimeError("No tensor output found in model dict output")
-
-        if isinstance(out, (list, tuple)):
-            for v in out:
-                if torch.is_tensor(v):
-                    return v
-            raise RuntimeError("No tensor output found in model tuple/list output")
-
-        if torch.is_tensor(out):
-            return out
-
-        raise RuntimeError(f"Unsupported model output type: {type(out)}")
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
@@ -162,6 +124,7 @@ def adaround_forward_fn(model, inputs):
     else:
         images = inputs
 
+    images = images.to(next(model.parameters()).device)
     return model(images)
 
 
@@ -188,9 +151,6 @@ def main(args):
         image_width=args.image_width,
         device=args.device,
     )
-    model = model.cpu().eval()
-    model = QuantAdapter(model, args.model_category).eval()
-    model = prepare_model(model).eval()
     model = model.to(args.device).eval()
 
     if args.enable_cle:
