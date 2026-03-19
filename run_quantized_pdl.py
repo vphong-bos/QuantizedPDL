@@ -13,8 +13,10 @@ from quantization.bias_correction import apply_bias_correction
 from utils.image_loader import load_images
 
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
+from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import quantsim
+
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
