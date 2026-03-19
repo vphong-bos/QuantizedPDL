@@ -11,6 +11,7 @@ from quantization.calibration_dataset import create_calibration_loader, sample_c
 from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
 from utils.image_loader import load_images
 
+from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import quantsim
 
@@ -82,6 +83,12 @@ def parse_args(argv=None):
         help="disable Cross-Layer Equalization",
     )
     parser.set_defaults(enable_cle=False)
+
+    parser.add_argument(
+        "--enable_bn_fold",
+        action="store_true",
+        help="apply batch norm folding before creating QuantSim",
+    )
 
     parser.add_argument(
         "--enable_adaround",
@@ -200,6 +207,16 @@ def main(args):
         model=model,
         model_category_const=model_category_const,
     ).to(args.device).eval()
+
+    if args.enable_bn_fold:
+        print("Applying batch norm folding...")
+        dummy_input_cpu = torch.randn(1, 3, args.image_height, args.image_width)
+
+        fold_all_batch_norms(
+            model=wrapped_model,
+            input_shapes=(1, 3, args.image_height, args.image_width),
+            dummy_input=dummy_input_cpu,
+        )
 
 
     if args.enable_adaround:
