@@ -3,7 +3,7 @@ import onnxruntime as ort
 
 
 def export_optimized_onnx_model(
-    input_onnx_path,
+    quant_weights,
     output_path,
     provider="CPUExecutionProvider",
     optimization_level="extended",   # "basic", "extended", "all"
@@ -12,7 +12,7 @@ def export_optimized_onnx_model(
     Export an ONNX Runtime optimized model.
 
     Args:
-        input_onnx_path (str): path to source .onnx
+        quant_weights (str): path to source .onnx
         output_path (str): path to save optimized model (.onnx or .ort)
         provider (str): ORT execution provider
         optimization_level (str): one of {"basic", "extended", "all"}
@@ -20,8 +20,8 @@ def export_optimized_onnx_model(
     Returns:
         str: saved path
     """
-    if not input_onnx_path.lower().endswith(".onnx"):
-        raise ValueError(f"Input must be .onnx, got: {input_onnx_path}")
+    if not quant_weights.lower().endswith(".onnx"):
+        raise ValueError(f"Input must be .onnx, got: {quant_weights}")
 
     output_dir = os.path.dirname(os.path.abspath(output_path))
     os.makedirs(output_dir, exist_ok=True)
@@ -34,7 +34,7 @@ def export_optimized_onnx_model(
     if optimization_level not in level_map:
         raise ValueError(f"Invalid optimization_level: {optimization_level}")
 
-    print(f"Exporting optimized ONNX model from: {input_onnx_path}")
+    print(f"Exporting optimized ONNX model from: {quant_weights}")
     print(f"Saving to: {output_path}")
     print(f"Using provider: {provider}")
     print(f"Optimization level: {optimization_level}")
@@ -45,7 +45,7 @@ def export_optimized_onnx_model(
 
     try:
         _ = ort.InferenceSession(
-            input_onnx_path,
+            quant_weights,
             sess_options=so,
             providers=[provider],
         )
