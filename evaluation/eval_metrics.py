@@ -103,13 +103,13 @@ def evaluate_model(model_obj, model_category_const, loader, device, max_samples=
             orig_h, orig_w = sample["orig_size"]
 
             # Accurate timing for GPU
-            if device.type == "cuda":
+            if device == "cuda":
                 torch.cuda.synchronize(device)
 
             start_time = time.perf_counter()
             logits = get_semantic_logits(model_obj, image, model_category_const)
 
-            if device.type == "cuda":
+            if device == "cuda":
                 torch.cuda.synchronize(device)
 
             end_time = time.perf_counter()
