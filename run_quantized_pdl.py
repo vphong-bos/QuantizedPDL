@@ -12,7 +12,6 @@ from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, 
 from quantization.bias_correction import apply_bias_correction
 from utils.image_loader import load_images
 
-from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import quantsim
