@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import os
 
 import torch
 
@@ -13,6 +14,10 @@ from evaluation.eval_dataset import build_eval_loader
 from evaluation.eval_metrics import evaluate_model
 
 from utils.pcc_metric import evaluate_pcc
+from utils.export_onnx import export_optimized_onnx_model
+
+pdl_home_path = os.path.dirname(os.path.realpath(__file__))
+DEFAULT_EXPORT_PATH = os.path.join(pdl_home_path, "quantized_export")
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -44,10 +49,31 @@ def parse_args():
                         choices=["CPUExecutionProvider", "CUDAExecutionProvider"],
                         help="ONNX Runtime execution provider when quant_weights is .onnx")
 
+    parser.add_argument(
+        "--export_optimized_onnx",
+        action="store_true",
+        help="Export ORT-optimized ONNX model from --quant_weights if it is .onnx",
+    )
+    parser.add_argument(
+        "--optimized_onnx_name",
+        type=str,
+        default="optimized_pdl",
+        help="Output path for optimized ONNX model",
+    )
+
     return parser.parse_args()
 
 def main():
     args = parse_args()
+
+    if args.export_optimized_onnx:
+        optimized_onnx_path = os.path.join(DEFAULT_EXPORT_PATH, f"{args.optimized_onnx_name}.onnx")
+
+        export_optimized_onnx_model(
+            quant_weights=args.quant_weights,
+            output_path=optimized_onnx_path,
+            provider=args.onnx_provider,
+        )
 
     loader = build_eval_loader(
         cityscapes_root=args.cityscapes_root,
@@ -113,7 +139,6 @@ def main():
         print("Skipping PCC: current evaluate_pcc expects a torch model, but quant model is ONNX Runtime.")
         pcc_value = float("nan")
 
-
     print("\n================ Compare FP32 vs Quantized ================")
 
     print("---- Accuracy ----")
@@ -134,5 +159,6 @@ def main():
     print(f"Latency reduction : {fp32_results['Avg_Inference_Time_ms'] - quant_results['Avg_Inference_Time_ms']:.2f} ms")
 
     print("===========================================================")
+
 if __name__ == "__main__":
     main()

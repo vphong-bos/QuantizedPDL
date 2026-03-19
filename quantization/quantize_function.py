@@ -52,6 +52,7 @@ def create_quant_sim(
     default_output_bw,
     default_param_bw,
     config_file = None,
+    skip_layer_names = None,
 ):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
@@ -67,20 +68,7 @@ def create_quant_sim(
         config_file = config_file,
     )
 
-    skip_layer_names = [
-        "model.backbone.stem.conv1",
-        "model.backbone.stem.conv1.norm",
-        "model.backbone.stem.conv2",
-        "model.backbone.stem.conv2.norm",
-        "model.backbone.stem.conv3",
-    ]
-
     name_to_module = dict(sim.model.named_modules())
-
-    # Debug: print possible matches around "stem"
-    for name in name_to_module:
-        if "stem" in name or "backbone" in name:
-            print(name)
 
     layers_to_exclude = []
     missing = []

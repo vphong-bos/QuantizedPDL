@@ -95,6 +95,8 @@ def parse_args(argv=None):
     )
     parser.add_argument("--no_export", action="store_true", help="skip AIMET export step")
 
+    parser.add_argument("--no_operation_orient", action="store_true", help="skip operation orient ONNX export step")
+
     parser.add_argument(
         "--config_file",
         type=str,
@@ -460,6 +462,14 @@ def main(args):
 
         # print(f"QuantAnalyzer results saved to: {args.quant_analyzer_dir}")
 
+    skip_layer_names = [
+        # "model.backbone.stem.conv1",
+        "model.backbone.stem.conv1.norm",
+        # "model.backbone.stem.conv2",
+        "model.backbone.stem.conv2.norm",
+        # "model.backbone.stem.conv3",
+    ]
+
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
         model=wrapped_model,
@@ -471,7 +481,10 @@ def main(args):
         default_output_bw=args.default_output_bw,
         default_param_bw=args.default_param_bw,
         config_file=args.config_file
+        skip_layer_names=skip_layer_names
     )
+
+
 
     print("Computing encodings with calibration data...")
     calib_start = time.time()
@@ -513,8 +526,32 @@ def main(args):
 
         print(f"Exported QDQ ONNX to: {onnx_path}")
 
-    print("Done.")
+    if not args.no_operation_orient:
+        print("Exporting operation orient quantized model to ONNX QDQ...")
+        sim.model.cpu().eval()
 
+        cpu_dummy_input = torch.randn(
+            1, 3, args.image_height, args.image_width, device="cpu"
+        )
+
+        os.makedirs(args.export_path, exist_ok=True)
+        onnx_path = os.path.join(args.export_path, f"{args.export_prefix_operation_orient}.onnx")
+
+        onnx.export(
+            sim.model,                 
+            cpu_dummy_input,
+            onnx_path,
+            input_names=["input"],
+            output_names=["output"],
+            opset_version=21,
+            export_int32_bias=True,
+            dynamo=False,
+            operator_export_type=torch.onnx.OperatorExportTypes.ONNX,
+        )
+
+        print(f"Exported QDQ ONNX to: {onnx_path}")
+
+    print("Done.")
 
 if __name__ == "__main__":
     args = parse_args()
