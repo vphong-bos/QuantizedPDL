@@ -1,6 +1,7 @@
 import argparse
 import glob
 import os
+import time
 from collections import OrderedDict
 
 import cv2
@@ -19,6 +20,7 @@ from model.pdl import (
 )
 
 from evaluation.eval_dataset import EvalDataset, eval_collate, build_eval_loader
+
 
 def get_semantic_logits(model_obj, x, model_category_const):
     backend = model_obj["backend"]
@@ -92,13 +94,26 @@ def evaluate_model(model_obj, model_category_const, loader, device, max_samples=
     conf_mat = torch.zeros((19, 19), dtype=torch.int64, device=device)
 
     processed = 0
+    total_inference_time = 0.0
+
     for batch in loader:
         for sample in batch:
             image = sample["image"].unsqueeze(0).to(device=device, dtype=torch.float32)
             label = sample["label"].to(device=device)
             orig_h, orig_w = sample["orig_size"]
 
+            # Accurate timing for GPU
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+
+            start_time = time.perf_counter()
             logits = get_semantic_logits(model_obj, image, model_category_const)
+
+            if device.type == "cuda":
+                torch.cuda.synchronize(device)
+
+            end_time = time.perf_counter()
+            total_inference_time += (end_time - start_time)
 
             logits = F.interpolate(
                 logits,
@@ -112,9 +127,16 @@ def evaluate_model(model_obj, model_category_const, loader, device, max_samples=
 
             processed += 1
             if processed % 50 == 0:
-                print(f"Processed {processed} images")
+                current_fps = processed / total_inference_time if total_inference_time > 0 else 0.0
+                print(f"Processed {processed} images | FPS: {current_fps:.2f}")
 
             if max_samples > 0 and processed >= max_samples:
-                return compute_miou_from_confmat(conf_mat)
+                metrics = compute_miou_from_confmat(conf_mat)
+                metrics["FPS"] = processed / total_inference_time if total_inference_time > 0 else 0.0
+                metrics["Avg_Inference_Time_ms"] = (total_inference_time / processed) * 1000.0
+                return metrics
 
-    return compute_miou_from_confmat(conf_mat)
+    metrics = compute_miou_from_confmat(conf_mat)
+    metrics["FPS"] = processed / total_inference_time if total_inference_time > 0 else 0.0
+    metrics["Avg_Inference_Time_ms"] = (total_inference_time / processed) * 1000.0 if processed > 0 else 0.0
+    return metrics

@@ -113,12 +113,26 @@ def main():
         print("Skipping PCC: current evaluate_pcc expects a torch model, but quant model is ONNX Runtime.")
         pcc_value = float("nan")
 
-    print("\n================ Compare FP32 vs Quantized ================")
-    print(f"FP32  mIoU: {fp32_results['mIoU']:.4f}")
-    print(f"INT8  mIoU: {quant_results['mIoU']:.4f}")
-    print(f"Drop      : {quant_results['mIoU'] - fp32_results['mIoU']:.4f}")
-    print(f"PCC       : {pcc_value:.6f}")
-    print("===========================================================")
 
+    print("\n================ Compare FP32 vs Quantized ================")
+
+    print("---- Accuracy ----")
+    print(f"FP32  mIoU : {fp32_results['mIoU']:.4f}")
+    print(f"INT8  mIoU : {quant_results['mIoU']:.4f}")
+    print(f"Drop       : {quant_results['mIoU'] - fp32_results['mIoU']:.4f}")
+
+    print("\n---- Correlation ----")
+    print(f"PCC        : {pcc_value:.6f}")
+
+    print("\n---- Performance ----")
+    print(f"FP32  FPS  : {fp32_results['FPS']:.2f}")
+    print(f"INT8  FPS  : {quant_results['FPS']:.2f}")
+    print(f"Speedup    : {quant_results['FPS'] / fp32_results['FPS']:.2f}x")
+
+    print(f"FP32  Latency (ms): {fp32_results['Avg_Inference_Time_ms']:.2f}")
+    print(f"INT8  Latency (ms): {quant_results['Avg_Inference_Time_ms']:.2f}")
+    print(f"Latency reduction : {fp32_results['Avg_Inference_Time_ms'] - quant_results['Avg_Inference_Time_ms']:.2f} ms")
+
+    print("===========================================================")
 if __name__ == "__main__":
     main()
