@@ -12,6 +12,7 @@ from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, 
 from utils.image_loader import load_images
 
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_torch.model_preparer import prepare_model
 from aimet_torch import quantsim
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
@@ -150,6 +151,8 @@ def main(args):
         image_width=args.image_width,
         device=args.device,
     )
+    model = model.cpu().eval()
+    model = prepare_model(model)
     model = model.to(args.device).eval()
 
     if args.enable_cle:
