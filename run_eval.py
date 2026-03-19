@@ -28,8 +28,8 @@ def parse_args():
 
     parser.add_argument("--model_category", type=str, default="PANOPTIC_DEEPLAB",
                         choices=["DEEPLAB_V3_PLUS", "PANOPTIC_DEEPLAB"])
-    parser.add_argument("--image_height", type=int, default=512)
-    parser.add_argument("--image_width", type=int, default=1024)
+    parser.add_argument("--image_height", type=int, default=1024)
+    parser.add_argument("--image_width", type=int, default=2048)
 
     parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--num_workers", type=int, default=2)

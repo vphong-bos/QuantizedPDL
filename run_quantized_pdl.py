@@ -24,8 +24,8 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--image_height", type=int, default=1025, help="input image height")
-    parser.add_argument("--image_width", type=int, default=2049, help="input image width")
+    parser.add_argument("--image_height", type=int, default=1024, help="input image height")
+    parser.add_argument("--image_width", type=int, default=2048, help="input image width")
 
     parser.add_argument("--weights_path", type=str, default=DEFAULT_WEIGHTS_PATH, help="path to FP32 model weights")
     parser.add_argument(

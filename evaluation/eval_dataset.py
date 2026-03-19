@@ -43,7 +43,7 @@ for k, v in MAPPING.items():
     ID_TO_TRAIN_ID[k] = v
 
 class EvalDataset(Dataset):
-    def __init__(self, cityscapes_root, split="val", image_width=1024, image_height=512):
+    def __init__(self, cityscapes_root, split="val", image_width=2048, image_height=1024):
         self.cityscapes_root = cityscapes_root
         self.split = split
         self.image_width = image_width
