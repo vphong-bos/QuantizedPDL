@@ -28,7 +28,7 @@ from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch.quant_analyzer import QuantAnalyzer
 from aimet_common.utils import CallbackFunc
-from aimet_torch import quantsim
+from aimet_torch import quantsim, onnx
 
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
@@ -490,16 +490,28 @@ def main(args):
         print(f"Saved AIMET sim checkpoint to: {args.save_quant_checkpoint}")
 
     if not args.no_export:
-        print("Exporting quantized model and encodings...")
+        print("Exporting quantized model to ONNX QDQ...")
         sim.model.cpu().eval()
-        cpu_dummy_input = torch.randn(1, 3, args.image_height, args.image_width, device="cpu")
 
-        sim.export(
-            path=args.export_path,
-            filename_prefix=args.export_prefix,
-            dummy_input=cpu_dummy_input,
+        cpu_dummy_input = torch.randn(
+            1, 3, args.image_height, args.image_width, device="cpu"
         )
-        print(f"Exported files to: {args.export_path}")
+
+        os.makedirs(args.export_path, exist_ok=True)
+        onnx_path = os.path.join(args.export_path, f"{args.export_prefix}.onnx")
+
+        onnx.export(
+            sim.model,                 # or sim, depending on your AIMET version
+            cpu_dummy_input,
+            onnx_path,
+            input_names=["input"],
+            output_names=["output"],
+            opset_version=21,
+            export_int32_bias=True,
+            dynamo=False,
+        )
+
+        print(f"Exported QDQ ONNX to: {onnx_path}")
 
     print("Done.")
 
