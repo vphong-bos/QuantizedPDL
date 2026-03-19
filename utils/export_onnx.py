@@ -1,45 +1,60 @@
 import os
 import onnxruntime as ort
 
+
 def export_optimized_onnx_model(
-    quant_weights,
-    output_path=None,
+    input_onnx_path,
+    output_path,
     provider="CPUExecutionProvider",
+    optimization_level="all",   # "basic", "extended", "all"
 ):
     """
-    Export an optimized ONNX model using ONNX Runtime graph optimization.
+    Export an ONNX Runtime optimized model.
 
     Args:
-        quant_weights (str): Path to input ONNX model.
-        output_path (str|None): Where to save optimized model.
-                                If None, auto-generates '<input>.optimized.onnx'.
-        provider (str): ONNX Runtime provider.
+        input_onnx_path (str): path to source .onnx
+        output_path (str): path to save optimized model (.onnx or .ort)
+        provider (str): ORT execution provider
+        optimization_level (str): one of {"basic", "extended", "all"}
 
     Returns:
-        str: Saved optimized model path.
+        str: saved path
     """
-    ext = os.path.splitext(quant_weights)[1].lower()
-    if ext != ".onnx":
-        raise ValueError(f"export_optimized_onnx_model expects an .onnx file, got: {quant_weights}")
+    if not input_onnx_path.lower().endswith(".onnx"):
+        raise ValueError(f"Input must be .onnx, got: {input_onnx_path}")
 
-    if output_path is None:
-        base, _ = os.path.splitext(quant_weights)
-        output_path = base + ".optimized.onnx"
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    os.makedirs(output_dir, exist_ok=True)
 
-    print(f"Exporting optimized ONNX model from: {quant_weights}")
+    level_map = {
+        "basic": ort.GraphOptimizationLevel.ORT_ENABLE_BASIC,
+        "extended": ort.GraphOptimizationLevel.ORT_ENABLE_EXTENDED,
+        "all": ort.GraphOptimizationLevel.ORT_ENABLE_ALL,
+    }
+    if optimization_level not in level_map:
+        raise ValueError(f"Invalid optimization_level: {optimization_level}")
+
+    print(f"Exporting optimized ONNX model from: {input_onnx_path}")
     print(f"Saving to: {output_path}")
     print(f"Using provider: {provider}")
+    print(f"Optimization level: {optimization_level}")
 
     so = ort.SessionOptions()
-    so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+    so.graph_optimization_level = level_map[optimization_level]
     so.optimized_model_filepath = output_path
 
-    # Creating the session triggers optimization + saving
-    _ = ort.InferenceSession(
-        quant_weights,
-        sess_options=so,
-        providers=[provider],
-    )
+    try:
+        _ = ort.InferenceSession(
+            input_onnx_path,
+            sess_options=so,
+            providers=[provider],
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to export optimized model to '{output_path}'. "
+            f"Try optimization_level='extended' instead of 'all', "
+            f"or save as '.ort' format. Original error: {e}"
+        ) from e
 
     print(f"Optimized model exported successfully: {output_path}")
     return output_path
