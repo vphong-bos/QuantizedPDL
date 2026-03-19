@@ -9,8 +9,10 @@ from model.pdl import build_model
 
 from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
 from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
+from quantization.bias_correction import apply_bias_correction
 from utils.image_loader import load_images
 
+from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
 from aimet_torch import quantsim
@@ -120,6 +122,29 @@ def parse_args(argv=None):
         help="filename prefix for AdaRound encodings",
     )
 
+    parser.add_argument(
+        "--enable_bias_correction",
+        action="store_true",
+        help="apply AIMET Bias Correction before creating QuantSim",
+    )
+    parser.add_argument(
+        "--bias_corr_num_quant_samples",
+        type=int,
+        default=256,
+        help="number of samples used to build temporary quant sim during bias correction",
+    )
+    parser.add_argument(
+        "--bias_corr_num_bias_samples",
+        type=int,
+        default=256,
+        help="number of samples used for bias correction",
+    )
+    parser.add_argument(
+        "--bias_corr_empirical_only",
+        action="store_true",
+        help="use empirical-only bias correction instead of analytical+empirical",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -162,8 +187,6 @@ def main(args):
 
     if args.enable_cle:
         print("Applying Cross-Layer Equalization (CLE)...")
-        from aimet_torch.cross_layer_equalization import equalize_model
-
         cle_start = time.time()
 
         model = model.cpu().eval()
@@ -217,6 +240,29 @@ def main(args):
             input_shapes=(1, 3, args.image_height, args.image_width),
             dummy_input=dummy_input_cpu,
         )
+
+    if args.enable_bias_correction:
+        print("Applying Bias Correction...")
+        bc_start = time.time()
+
+        wrapped_model = apply_bias_correction(
+            model=wrapped_model,
+            calib_loader=calib_loader,
+            image_height=args.image_height,
+            image_width=args.image_width,
+            quant_scheme=args.quant_scheme,
+            default_param_bw=args.default_param_bw,
+            default_output_bw=args.default_output_bw,
+            config_file=args.config_file,
+            bias_corr_num_quant_samples=args.bias_corr_num_quant_samples,
+            bias_corr_num_bias_samples=args.bias_corr_num_bias_samples,
+            bias_corr_empirical_only = args.bias_corr_empirical_only,
+        )
+
+        bc_time = time.time() - bc_start
+        print(f"Bias Correction finished in {bc_time:.2f} s")
+    else:
+        print("Bias Correction disabled")
 
     wrapped_model = wrapped_model.to(args.device).eval()
 
