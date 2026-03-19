@@ -176,7 +176,7 @@ def load_aimet_quantized_model(
         print("Detected ONNX model")
 
         so = ort.SessionOptions()
-        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+        so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
         session = ort.InferenceSession(
             quant_weights,
