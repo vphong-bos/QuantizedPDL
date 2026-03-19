@@ -117,10 +117,13 @@ def parse_args(argv=None):
 
 
 def adaround_forward_fn(model, inputs):
-    if isinstance(inputs, (list, tuple)):
+    if isinstance(inputs, dict):
+        images = inputs["image"]
+    elif isinstance(inputs, (list, tuple)):
         images = inputs[0]
     else:
         images = inputs
+
     return model(images)
 
 
