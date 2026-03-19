@@ -463,11 +463,11 @@ def main(args):
         # print(f"QuantAnalyzer results saved to: {args.quant_analyzer_dir}")
 
     skip_layer_names = [
-        "model.backbone.stem.conv1",
-        "model.backbone.stem.conv1.norm",
-        "model.backbone.stem.conv2",
-        "model.backbone.stem.conv2.norm",
-        "model.backbone.stem.conv3",
+        # "model.backbone.stem.conv1",
+        # "model.backbone.stem.conv1.norm",
+        # "model.backbone.stem.conv2",
+        # "model.backbone.stem.conv2.norm",
+        # "model.backbone.stem.conv3",
     ]
 
     print("Creating AIMET QuantizationSimModel...")
