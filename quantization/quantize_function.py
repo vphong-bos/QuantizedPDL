@@ -52,6 +52,7 @@ def create_quant_sim(
     default_output_bw,
     default_param_bw,
     config_file = None,
+    layers_to_exclude = None
 ):
     dummy_input = torch.randn(1, 3, image_height, image_width, device=device)
 
@@ -66,6 +67,8 @@ def create_quant_sim(
         default_param_bw=default_param_bw,
         config_file = config_file,
     )
+
+    sim.exclude_layers_from_quantization(layers_to_exclude)
 
     return sim, dummy_input
 
