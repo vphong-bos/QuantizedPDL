@@ -8,20 +8,34 @@ import torch
 
 from model.pdl import build_model
 
-from quantization.calibration_dataset import create_calibration_loader, sample_calibration_images
-from quantization.quantize_function import AimetTraceWrapper, create_quant_sim, calibration_forward_pass
+from quantization.calibration_dataset import (
+    create_calibration_loader,
+    sample_calibration_images,
+)
+from quantization.quantize_function import (
+    AimetTraceWrapper,
+    create_quant_sim,
+    calibration_forward_pass,
+)
 from quantization.bias_correction import apply_bias_correction, copy_biases
 from utils.image_loader import load_images
+
+from evaluation.eval_dataset import build_eval_loader
+from evaluation.eval_metrics import evaluate_model
 
 from aimet_torch.batch_norm_fold import fold_all_batch_norms
 from aimet_torch.cross_layer_equalization import equalize_model
 from aimet_torch.adaround.adaround_weight import Adaround, AdaroundParameters
+from aimet_torch.quant_analyzer import QuantAnalyzer
+from aimet_common.utils import CallbackFunc
 from aimet_torch import quantsim
 
 
 pdl_home_path = os.path.dirname(os.path.realpath(__file__))
 DEFAULT_WEIGHTS_PATH = os.path.join(pdl_home_path, "weights", "model_final_bd324a.pkl")
 DEFAULT_EXPORT_PATH = os.path.join(pdl_home_path, "quantized_export")
+DEFAULT_ANALYZER_PATH = os.path.join(pdl_home_path, "quant_analyzer_results")
+
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser()
@@ -30,7 +44,12 @@ def parse_args(argv=None):
     parser.add_argument("--image_height", type=int, default=512, help="input image height")
     parser.add_argument("--image_width", type=int, default=1024, help="input image width")
 
-    parser.add_argument("--weights_path", type=str, default=DEFAULT_WEIGHTS_PATH, help="path to FP32 model weights")
+    parser.add_argument(
+        "--weights_path",
+        type=str,
+        default=DEFAULT_WEIGHTS_PATH,
+        help="path to FP32 model weights",
+    )
     parser.add_argument(
         "--model_category",
         type=str,
@@ -62,15 +81,25 @@ def parse_args(argv=None):
         help="optional path to save AIMET sim checkpoint",
     )
 
-    parser.add_argument("--export_path", type=str, default=DEFAULT_EXPORT_PATH, help="path to export quantized model")
-    parser.add_argument("--export_prefix", type=str, default="panoptic_deeplab_int8", help="export filename prefix")
+    parser.add_argument(
+        "--export_path",
+        type=str,
+        default=DEFAULT_EXPORT_PATH,
+        help="path to export quantized model",
+    )
+    parser.add_argument(
+        "--export_prefix",
+        type=str,
+        default="panoptic_deeplab_int8",
+        help="export filename prefix",
+    )
     parser.add_argument("--no_export", action="store_true", help="skip AIMET export step")
 
     parser.add_argument(
         "--config_file",
         type=str,
         default=None,
-        help="Config for quantize model",
+        help="config file for quantized model",
     )
 
     parser.add_argument(
@@ -146,6 +175,43 @@ def parse_args(argv=None):
         help="use empirical-only bias correction instead of analytical+empirical",
     )
 
+    parser.add_argument(
+        "--run_quant_analyzer",
+        action="store_true",
+        help="run AIMET QuantAnalyzer and save sensitivity reports",
+    )
+    parser.add_argument(
+        "--quant_analyzer_dir",
+        type=str,
+        default=DEFAULT_ANALYZER_PATH,
+        help="directory to save QuantAnalyzer outputs",
+    )
+    parser.add_argument(
+        "--analyzer_num_batches",
+        type=int,
+        default=None,
+        help="number of calibration batches for analyzer forward pass; default uses all",
+    )
+    parser.add_argument(
+        "--cityscapes_root",
+        type=str,
+        default=None,
+        help="Cityscapes root, required when --run_quant_analyzer is set",
+    )
+    parser.add_argument(
+        "--eval_split",
+        type=str,
+        default="val",
+        choices=["val", "test"],
+        help="evaluation split for QuantAnalyzer",
+    )
+    parser.add_argument(
+        "--eval_max_samples",
+        type=int,
+        default=-1,
+        help="max eval samples for QuantAnalyzer, -1 means full split",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -159,6 +225,39 @@ def adaround_forward_fn(model, inputs):
 
     images = images.to(next(model.parameters()).device)
     return model(images)
+
+
+def analyzer_forward_pass(model, callback_args):
+    calib_loader, device, max_batches = callback_args
+
+    model.eval()
+    with torch.no_grad():
+        for batch_idx, batch in enumerate(calib_loader):
+            if max_batches is not None and batch_idx >= max_batches:
+                break
+
+            if isinstance(batch, dict):
+                images = batch["image"]
+            elif isinstance(batch, (list, tuple)):
+                images = batch[0]
+            else:
+                images = batch
+
+            images = images.to(device)
+            _ = model(images)
+
+
+def analyzer_eval_callback(model, callback_args):
+    eval_loader, model_category_const, device, max_samples = callback_args
+
+    results = evaluate_model(
+        model=model,
+        model_category_const=model_category_const,
+        loader=eval_loader,
+        device=device,
+        max_samples=max_samples,
+    )
+    return float(results["mIoU"])
 
 
 def main(args):
@@ -175,6 +274,21 @@ def main(args):
     if args.adaround_path is None:
         args.adaround_path = args.export_path
     os.makedirs(args.adaround_path, exist_ok=True)
+
+    eval_loader = None
+    if args.run_quant_analyzer:
+        if args.cityscapes_root is None:
+            raise ValueError("--cityscapes_root is required when --run_quant_analyzer is set")
+
+        print("Building evaluation loader for QuantAnalyzer...")
+        eval_loader = build_eval_loader(
+            cityscapes_root=args.cityscapes_root,
+            split=args.eval_split,
+            image_width=args.image_width,
+            image_height=args.image_height,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+        )
 
     print("Loading FP32 model...")
     model, model_category_const = build_model(
@@ -241,6 +355,8 @@ def main(args):
             input_shapes=(1, 3, args.image_height, args.image_width),
             dummy_input=dummy_input_cpu,
         )
+    else:
+        print("BN folding disabled")
 
     if args.enable_bias_correction:
         print("Applying Bias Correction...")
@@ -263,7 +379,6 @@ def main(args):
         )
 
         copy_biases(bc_model, wrapped_model)
-
         del bc_model
 
         bc_time = time.time() - bc_start
@@ -303,6 +418,47 @@ def main(args):
         )
     else:
         print("AdaRound disabled")
+
+    if args.run_quant_analyzer:
+        print("Running AIMET QuantAnalyzer...")
+        os.makedirs(args.quant_analyzer_dir, exist_ok=True)
+
+        dummy_input = torch.randn(
+            1, 3, args.image_height, args.image_width, device=args.device
+        )
+
+        forward_pass_callback = CallbackFunc(
+            analyzer_forward_pass,
+            func_callback_args=(calib_loader, args.device, args.analyzer_num_batches),
+        )
+
+        eval_callback = CallbackFunc(
+            analyzer_eval_callback,
+            func_callback_args=(
+                eval_loader,
+                model_category_const,
+                args.device,
+                args.eval_max_samples,
+            ),
+        )
+
+        analyzer = QuantAnalyzer(
+            model=wrapped_model,
+            dummy_input=dummy_input,
+            forward_pass_callback=forward_pass_callback,
+            eval_callback=eval_callback,
+            modules_to_ignore=None,
+        )
+
+        analyzer.analyze(
+            quant_scheme=args.quant_scheme,
+            default_param_bw=args.default_param_bw,
+            default_output_bw=args.default_output_bw,
+            config_file=args.config_file,
+            results_dir=args.quant_analyzer_dir,
+        )
+
+        print(f"QuantAnalyzer results saved to: {args.quant_analyzer_dir}")
 
     print("Creating AIMET QuantizationSimModel...")
     sim, _ = create_quant_sim(
