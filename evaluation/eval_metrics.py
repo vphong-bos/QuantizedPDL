@@ -21,27 +21,44 @@ from model.pdl import (
 
 from evaluation.eval_dataset import EvalDataset, eval_collate, build_eval_loader
 
+def normalize_logits_output(output):
+    if isinstance(output, torch.Tensor):
+        return output
+
+    if isinstance(output, (list, tuple)):
+        # usually first element is the main segmentation logits
+        output = output[0]
+
+    if isinstance(output, dict):
+        if "out" in output:
+            output = output["out"]
+        else:
+            output = next(iter(output.values()))
+
+    if not isinstance(output, torch.Tensor):
+        raise TypeError(f"Expected Tensor after unwrapping, got {type(output)}")
+
+    return output
+
 def get_semantic_logits(model_obj, image, model_category_const):
     if model_obj["backend"] == "torch":
-        return model_obj["model"](image)
+        output = model_obj["model"](image)
+        return normalize_logits_output(output)
 
     elif model_obj["backend"] == "onnx":
-        session = model_obj["model"]
+        session = model_obj["session"]
+        input_name = model_obj["input_name"]
 
-        input_name = session.get_inputs()[0].name
-        ort_out = session.run(None, {input_name: image.detach().cpu().numpy()})[0]
+        outputs = session.run(None, {input_name: image.detach().cpu().numpy()})
+        logits = torch.from_numpy(outputs[0]).to(image.device).float()
 
-        logits = torch.from_numpy(ort_out).to(image.device)
-
-        # If ONNX exported NHWC, convert to NCHW
+        # fix NHWC if needed
         if logits.ndim == 4 and logits.shape[1] != 19 and logits.shape[-1] == 19:
             logits = logits.permute(0, 3, 1, 2).contiguous()
 
         return logits
 
-    else:
-        raise ValueError(f"Unsupported backend: {model_obj['backend']}")
-
+    raise ValueError(f"Unsupported backend: {model_obj['backend']}")
 
 def update_confusion_matrix(conf_mat, pred, target, num_classes=19, ignore_index=255):
     valid = target != ignore_index
