@@ -526,30 +526,30 @@ def main(args):
 
         print(f"Exported QDQ ONNX to: {onnx_path}")
 
-    if not args.no_operation_orient:
-        print("Exporting operation orient quantized model to ONNX QDQ...")
-        sim.model.cpu().eval()
+    # if not args.no_operation_orient:
+    #     print("Exporting operation orient quantized model to ONNX QDQ...")
+    #     sim.model.cpu().eval()
 
-        cpu_dummy_input = torch.randn(
-            1, 3, args.image_height, args.image_width, device="cpu"
-        )
+    #     cpu_dummy_input = torch.randn(
+    #         1, 3, args.image_height, args.image_width, device="cpu"
+    #     )
 
-        os.makedirs(args.export_path, exist_ok=True)
-        onnx_path = os.path.join(args.export_path, f"{args.export_prefix}_operation_orient.onnx")
+    #     os.makedirs(args.export_path, exist_ok=True)
+    #     onnx_path = os.path.join(args.export_path, f"{args.export_prefix}_operation_orient.onnx")
 
-        onnx.export(
-            sim.model,                 
-            cpu_dummy_input,
-            onnx_path,
-            input_names=["input"],
-            output_names=["output"],
-            opset_version=21,
-            export_int32_bias=True,
-            dynamo=False,
-            operator_export_type=torch.onnx.OperatorExportTypes.ONNX,
-        )
+    #     onnx.export(
+    #         sim.model,                 
+    #         cpu_dummy_input,
+    #         onnx_path,
+    #         input_names=["input"],
+    #         output_names=["output"],
+    #         opset_version=21,
+    #         export_int32_bias=True,
+    #         dynamo=False,
+    #         operator_export_type=torch.onnx.OperatorExportTypes.ONNX,
+    #     )
 
-        print(f"Exported QDQ ONNX to: {onnx_path}")
+    #     print(f"Exported QDQ ONNX to: {onnx_path}")
 
     print("Done.")
 
