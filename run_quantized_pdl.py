@@ -502,6 +502,8 @@ def main(args):
         quantsim.save_checkpoint(sim, args.save_quant_checkpoint)
         print(f"Saved AIMET sim checkpoint to: {args.save_quant_checkpoint}")
 
+    from aimet_torch import onnx as aimet_onnx
+
     if not args.no_export:
         print("Exporting quantized model to ONNX QDQ...")
         sim.model.cpu().eval()
@@ -513,15 +515,15 @@ def main(args):
         os.makedirs(args.export_path, exist_ok=True)
         onnx_path = os.path.join(args.export_path, f"{args.export_prefix}.onnx")
 
-        onnx.export(
-            sim.model,                 # or sim, depending on your AIMET version
+        aimet_onnx.export(
+            sim.model,
             cpu_dummy_input,
             onnx_path,
             input_names=["input"],
             output_names=["output"],
             opset_version=21,
             export_int32_bias=True,
-            dynamo=False,
+            dynamo=False,   # AIMET says dynamo=True is not supported here
         )
 
         print(f"Exported QDQ ONNX to: {onnx_path}")

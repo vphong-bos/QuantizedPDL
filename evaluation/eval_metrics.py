@@ -21,40 +21,26 @@ from model.pdl import (
 
 from evaluation.eval_dataset import EvalDataset, eval_collate, build_eval_loader
 
+def get_semantic_logits(model_obj, image, model_category_const):
+    if model_obj["backend"] == "torch":
+        return model_obj["model"](image)
 
-def get_semantic_logits(model_obj, x, model_category_const):
-    backend = model_obj["backend"]
+    elif model_obj["backend"] == "onnx":
+        session = model_obj["model"]
 
-    if backend == "torch":
-        model = model_obj["model"]
-        with torch.no_grad():
-            outputs = model(x)
+        input_name = session.get_inputs()[0].name
+        ort_out = session.run(None, {input_name: image.detach().cpu().numpy()})[0]
 
-        if model_category_const == DEEPLAB_V3_PLUS:
-            if isinstance(outputs, (tuple, list)):
-                return outputs[0]
-            return outputs
+        logits = torch.from_numpy(ort_out).to(image.device)
 
-        # PANOPTIC_DEEPLAB
-        if isinstance(outputs, (tuple, list)):
-            return outputs[0]
+        # If ONNX exported NHWC, convert to NCHW
+        if logits.ndim == 4 and logits.shape[1] != 19 and logits.shape[-1] == 19:
+            logits = logits.permute(0, 3, 1, 2).contiguous()
 
-        raise TypeError(f"Unexpected model output type: {type(outputs)}")
-
-    elif backend == "onnx":
-        session = model_obj["session"]
-        input_name = model_obj["input_name"]
-
-        x_np = x.detach().cpu().numpy().astype(np.float32)
-        outputs = session.run(None, {input_name: x_np})
-
-        # Keep same assumption as torch path: semantic logits are first output
-        logits = outputs[0]
-
-        return torch.from_numpy(logits).to(device=x.device)
+        return logits
 
     else:
-        raise ValueError(f"Unsupported backend: {backend}")
+        raise ValueError(f"Unsupported backend: {model_obj['backend']}")
 
 
 def update_confusion_matrix(conf_mat, pred, target, num_classes=19, ignore_index=255):
